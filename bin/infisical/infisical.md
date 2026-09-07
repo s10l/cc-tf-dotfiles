@@ -99,11 +99,27 @@ certificate as the TLS client certificate (`curl --cert-type P12 --cert`).
 The file must be a PKCS#12 (`.pfx`/`.p12`) container holding both the client
 certificate and its key.
 
-## Errors
+## Errors and exit codes
 
-- If the config file is missing, or required variables are not set in it, the
-  script prints an error and exits non-zero.
+All failure modes write their diagnostic to **stderr** and exit with code `1`.
+On any failure **stdout is empty**, so command substitution yields `""` and
+can be tested directly:
+
+```bash
+if ! value=$(./infisical.sh secret get GLPAT); then
+  echo "could not retrieve GLPAT" >&2
+  exit 1
+fi
+```
+
+- Missing config file, or required variables not set in it → clear error.
+- Missing `jq` → clear error naming the requirement.
 - Network failures report the `curl` exit code.
 - API errors (non-200) report the HTTP status, the full request URL, and the
   response body — useful for diagnosing 401/403/404 (often a token scope,
-  environment slug, or path mismatch)
+  environment slug, or path mismatch). A 404 additionally names the missing
+  secret and the environment/path it was looked up in.
+- HTTP 200 but the response contains no `secret` object → "secret not found".
+
+If a secret exists but its value is empty, the script treats that as success:
+it prints an empty string and exits `0`, emitting a `note:` hint on stderr.

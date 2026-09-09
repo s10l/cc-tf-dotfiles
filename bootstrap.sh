@@ -14,12 +14,9 @@ else
 fi
 
 # --- Make configure scripts executable & run them ---
-for script in "${SCRIPT_DIR}/configure/gitlab.sh" "${SCRIPT_DIR}/configure/github.sh"; do
-  if [ -f "${script}" ]; then
-    chmod +x "${script}"
-    echo "=== Running ${script} ==="
-    bash "${script}"
-  else
-    echo "Missing: ${script}"
-  fi
+for script in "${SCRIPT_DIR}/configure/"*.sh; do
+  [ -f "${script}" ] || continue
+  chmod +x "${script}"
+  echo "=== Running ${script} ==="
+  bash "${script}"
 done

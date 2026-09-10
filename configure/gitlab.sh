@@ -35,5 +35,5 @@ fi
 # --- mTLS (git config overwrites, so idempotent by nature) ---
 git config --global "http.https://${GITLAB_HOST}/.sslCert" "${GITLAB_CLIENT_CERT_FILE}"
 git config --global "http.https://${GITLAB_HOST}/.sslCertType" P12
-git config --global "http.https://${GITLAB_HOST}/.sslKey" "${GITLAB_CLIENT_CERT_FILE}"
+# git config --global "http.https://${GITLAB_HOST}/.sslKey" "${GITLAB_CLIENT_CERT_FILE}" # this is not valid for a P12 bundle with cert+key
 echo "[gitlab] configured mTLS for ${GITLAB_HOST}"

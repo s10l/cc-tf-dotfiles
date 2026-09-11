@@ -16,11 +16,12 @@ build:
     name: s10l/gl-gi-docker-deploy:2026.09.07
   tags:
     - $BUILD_ARCH
-  matrix:
-    - BUILD_ARCH: AMD64
-      TAG_SUFFIX: amd64
-    - BUILD_ARCH: ARM64
-      TAG_SUFFIX: arm64
+  parallel:
+    matrix:
+      - BUILD_ARCH: AMD64
+        TAG_SUFFIX: amd64
+      - BUILD_ARCH: ARM64
+        TAG_SUFFIX: arm64
   before_script:
     # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL
@@ -57,11 +58,12 @@ build-renovate:
     name: s10l/gl-gi-docker-deploy:2026.09.07
   tags:
     - $BUILD_ARCH
-  matrix:
-    - BUILD_ARCH: AMD64
-      TAG_SUFFIX: amd64
-    - BUILD_ARCH: ARM64
-      TAG_SUFFIX: arm64
+  parallel:
+    matrix:
+      - BUILD_ARCH: AMD64
+        TAG_SUFFIX: amd64
+      - BUILD_ARCH: ARM64
+        TAG_SUFFIX: arm64
   before_script:
     # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL

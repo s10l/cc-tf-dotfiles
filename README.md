@@ -19,6 +19,7 @@ Running `bootstrap.sh` will:
    - **GitHub**: Stores a PAT credential via Infisical secret `/git/ghpat`
    - **GitLab**: Stores a PAT credential + configures mTLS (reads config from `~/.config/gitlab/.env`)
    - **Skills**: Copies skills from `configure/skills.d/` to `~/.config/opencode/skills/`
+   - **Uber Tools**: Clones `https://${GITLAB_HOST}/uber/tools.git` to `~/.config/uber-tools` (or updates it), then adds its directory to PATH and an `ut` alias in both `~/.bashrc` and `~/.zshrc` (skips if `~/.config/gitlab/.env` is missing)
 
 ## License
 

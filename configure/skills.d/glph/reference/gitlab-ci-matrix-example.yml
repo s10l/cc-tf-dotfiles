@@ -22,7 +22,7 @@ build:
     - BUILD_ARCH: ARM64
       TAG_SUFFIX: arm64
   before_script:
-    - # docker
+    # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL
     - export IMAGE_DATE=$(date +%Y.%m.%d)
   script:
@@ -38,7 +38,7 @@ manifest:
   image:
     name: s10l/gl-gi-docker-deploy:2026.09.07
   before_script:
-    - # docker
+    # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL
     - export IMAGE_DATE=$(date +%Y.%m.%d)
   script:
@@ -63,7 +63,7 @@ build-renovate:
     - BUILD_ARCH: ARM64
       TAG_SUFFIX: arm64
   before_script:
-    - # docker
+    # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL
   script:
     - docker build -t $DOCKER_REGISTRY_HOST_LOCAL/$DOCKER_REGISTRY_PROJECT/$DOCKER_REPOSITORY:$CI_COMMIT_SHORT_SHA-$TAG_SUFFIX .

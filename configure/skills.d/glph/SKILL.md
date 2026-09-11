@@ -24,12 +24,12 @@ description: Inspect a .gitlab-ci pipeline and propose a plan to harmonize/align
 ### SSH
 
 - SSH configuration must live in the job's `before_script` (a global `before_script` is also ok).
-- The ssh section must be preceded by a comment line `- # ssh`.
+- The ssh section must be preceded by a comment line `# ssh`.
 
 ### Docker
 
 - Docker configuration (login, context setup) must live in `before_script`.
-- The docker section must be preceded by a comment line `- # docker`.
+- The docker section must be preceded by a comment line `# docker`.
 - If a context is created and it is the only one, it must be named `remote_host`.
 
 ### Pushed image tags

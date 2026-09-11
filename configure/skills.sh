@@ -21,7 +21,7 @@ for skill_dir in "${SKILLS_SRC}"/*/; do
     continue
   fi
 
-  mkdir -p "${SKILLS_DST}/${skill_name}"
-  cp -f "${skill_dir}SKILL.md" "${SKILLS_DST}/${skill_name}/SKILL.md"
+  rm -rf "${SKILLS_DST}/${skill_name}"
+  cp -R "${skill_dir}" "${SKILLS_DST}/${skill_name}"
   echo "[skills] installed ${skill_name}"
 done

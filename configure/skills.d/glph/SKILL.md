@@ -17,6 +17,9 @@ description: Inspect a .gitlab-ci pipeline and propose a plan to harmonize/align
 - Any job that uses common commands, ssh, or docker (alone or combined) must use `s10l/gl-gi-docker-deploy:2026.09.07` or later as its image.
 - Never use `latest` as an image tag — always pin a version.
 - On violation, flag the job and recommend the pinned `s10l/gl-gi-docker-deploy` image, letting the user pick a newer pin if they want.
+- If the image is `s10l/gl-gi-docker-deploy`, do not set `entrypoint: ["/bin/sh", "-c"]` — omit the entrypoint entirely.
+- Never share images via templates/anchors (e.g. `<<: *image`); each job declares its `image:` inline.
+- Every job must declare its own explicit `image:` — don't rely on a default or inherited image.
 
 ### SSH
 
@@ -41,6 +44,7 @@ Never rely on `$CI_PIPELINE_ID` (or similar pipeline-scoped values) for tags.
 
 - If stages are similar, use matrix stages to reduce duplication.
 - Show the user a potential diff of the matrix refactor.
+- For a worked matrix example, see `reference/gitlab-ci-matrix-example.yml` (global variables are illustrative and may change).
 
 ### Rules (only/except)
 

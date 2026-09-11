@@ -15,7 +15,8 @@ description: Stage all changes, commit with a conventional commit message, and p
    - `test`: adding or updating tests
    - `chore`: build process, dependencies, tooling
    - `perf`: performance improvement
-3. Write a commit message following [Conventional Commits](https://www.conventionalcommits.org/) format: `<type>(<scope>): <description>`
+3. Write a commit message following [Conventional Commits](https://www.conventionalcommits.org/) format: `<type>: <description>`
+   - Never include a scope (the parentheses part)
 4. Commit with the message
 5. Push to the current branch. If push fails because no upstream is set, run the command git suggests (typically `git push --set-upstream origin <branch>`)
 
@@ -29,3 +30,4 @@ Use this when the user wants to commit and push their changes.
 - Only commit if the user approves the message
 - If there are no staged or unstaged changes, do nothing
 - Keep the description concise and imperative
+- Never include a scope (parentheses) in the commit message

@@ -1,5 +1,5 @@
 ---
-name: sempush
+name: ccpush
 description: Stage all changes, commit with a conventional commit message, and push to upstream
 ---
 

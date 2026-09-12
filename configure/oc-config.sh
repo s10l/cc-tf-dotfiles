@@ -118,3 +118,33 @@ else
     ' "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
   echo "[opencode] configured hard-deny permissions"
 fi
+
+TMPFILE=$(mktemp)
+jq --argjson omlx '{
+  "npm": "@ai-sdk/openai-compatible",
+  "name": "oMLX",
+  "options": {
+    "baseURL": "http://localhost:11433/v1"
+  },
+  "models": {
+    "Qwen3.8-9B-Distill-oQ4e-mtp": {
+      "name": "Qwen3.8-9B-Distill-oQ4e-mtp"
+    },
+    "Qwen3.8-27B-oQ3.5e-mtp": {
+      "name": "Qwen3.8-27B-oQ3.5e-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "variants": {
+        "high": {
+          "reasoningEffort": "xhigh"
+        },
+        "medium": {
+          "reasoningEffort": "medium"
+        }
+      }
+    }
+  }
+}' '.provider.omlx = ($omlx * (.provider.omlx // {}))' "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
+echo "[opencode] configured omlx provider"

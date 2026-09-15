@@ -47,26 +47,141 @@ if [ -z "${CONFIG_FILE}" ]; then
   echo "[opencode] created ${CONFIG_FILE}"
 fi
 
-if ! jq -e . "${CONFIG_FILE}" >/dev/null 2>&1; then
-  echo "[opencode] skipping: cannot parse ${CONFIG_FILE} (JSONC comments?)"
+if ! command -v node >/dev/null 2>&1; then
+  echo "[opencode] skipping: node not found (needed to parse JSONC)"
   exit 0
 fi
 
-if jq -e ".instructions" "${CONFIG_FILE}" >/dev/null 2>&1; then
-  if ! jq -e ".instructions | index(\"${AGENTS_MARKER}\")" "${CONFIG_FILE}" >/dev/null 2>&1; then
+WORK_FILE=$(mktemp)
+SANITIZER=$(mktemp --suffix=.cjs)
+trap 'rm -f "${SANITIZER}" "${WORK_FILE}"' EXIT
+
+cat > "${SANITIZER}" << 'EOF'
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[2], "utf8");
+let out = "";
+let inString = false;
+let inLine = false;
+let inBlock = false;
+let pendingComma = false;
+let wsBuf = "";
+const n = src.length;
+let i = 0;
+while (i < n) {
+  const c = src[i];
+  const d = i + 1 < n ? src[i + 1] : "";
+  if (inLine) {
+    if (c === "\n") {
+      out += c;
+      inLine = false;
+    }
+    i++;
+    continue;
+  }
+  if (inBlock) {
+    if (c === "*" && d === "/") {
+      inBlock = false;
+      i += 2;
+      continue;
+    }
+    if (c === "\n") out += c;
+    i++;
+    continue;
+  }
+  if (inString) {
+    out += c;
+    if (c === "\\" && d !== "") {
+      out += d;
+      i += 2;
+      continue;
+    }
+    if (c === '"') inString = false;
+    i++;
+    continue;
+  }
+  if (pendingComma) {
+    if (c === " " || c === "\t" || c === "\r" || c === "\n") {
+      wsBuf += c;
+      i++;
+      continue;
+    }
+    if (c === "/" && d === "/") {
+      i += 2;
+      while (i < n && src[i] !== "\n") i++;
+      if (i < n) {
+        wsBuf += "\n";
+        i++;
+      }
+      continue;
+    }
+    if (c === "/" && d === "*") {
+      i += 2;
+      while (i < n && !(src[i] === "*" && src[i + 1] === "/")) {
+        if (src[i] === "\n") wsBuf += "\n";
+        i++;
+      }
+      if (i < n) i += 2;
+      continue;
+    }
+    if (c === "}" || c === "]") {
+      pendingComma = false;
+    } else {
+      out += ",";
+      pendingComma = false;
+    }
+    out += wsBuf;
+    wsBuf = "";
+  }
+  if (c === '"') {
+    inString = true;
+    out += c;
+    i++;
+    continue;
+  }
+  if (c === "/" && d === "/") {
+    inLine = true;
+    i += 2;
+    continue;
+  }
+  if (c === "/" && d === "*") {
+    inBlock = true;
+    i += 2;
+    continue;
+  }
+  if (c === ",") {
+    pendingComma = true;
+    wsBuf = "";
+    i++;
+    continue;
+  }
+  out += c;
+  i++;
+}
+fs.writeFileSync(process.argv[3], out);
+EOF
+
+node "${SANITIZER}" "${CONFIG_FILE}" "${WORK_FILE}"
+
+if ! jq -e . "${WORK_FILE}" >/dev/null 2>&1; then
+  echo "[opencode] skipping: cannot parse ${CONFIG_FILE} (invalid JSON/JSONC)"
+  exit 0
+fi
+
+if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
+  if ! jq -e ".instructions | index(\"${AGENTS_MARKER}\")" "${WORK_FILE}" >/dev/null 2>&1; then
     TMPFILE=$(mktemp)
-    jq ".instructions += [\"${AGENTS_MARKER}\"]" "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
+    jq ".instructions += [\"${AGENTS_MARKER}\"]" "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
     echo "[opencode] updated instructions"
   else
     echo "[opencode] instructions already configured"
   fi
 else
   TMPFILE=$(mktemp)
-  jq ". + { \"instructions\": [\"${AGENTS_MARKER}\"] }" "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
+  jq ". + { \"instructions\": [\"${AGENTS_MARKER}\"] }" "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
   echo "[opencode] added instructions"
 fi
 
-if jq -e '.permission | type == "string"' "${CONFIG_FILE}" >/dev/null 2>&1; then
+if jq -e '.permission | type == "string"' "${WORK_FILE}" >/dev/null 2>&1; then
   echo "[opencode] skipping permissions: .permission is a flat string; convert to an object and rerun"
 else
   TMPFILE=$(mktemp)
@@ -115,7 +230,7 @@ else
           "tail ~/.git-credentials": "deny"
         }
         end)
-    ' "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
+    ' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
   echo "[opencode] configured hard-deny permissions"
 fi
 
@@ -171,5 +286,8 @@ jq --argjson omlx '{
       }
     }
   }
-}' '.provider.omlx = ($omlx * (.provider.omlx // {}))' "${CONFIG_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${CONFIG_FILE}"
+}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = (($t.models // {}) * $s.models))' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
 echo "[opencode] configured omlx provider"
+
+mv "${WORK_FILE}" "${CONFIG_FILE}"
+echo "[opencode] wrote ${CONFIG_FILE}"

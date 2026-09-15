@@ -128,7 +128,22 @@ jq --argjson omlx '{
   },
   "models": {
     "Qwen3.8-9B-Distill-oQ4e-mtp": {
-      "name": "Qwen3.8-9B-Distill-oQ4e-mtp"
+      "name": "Qwen3.8-9B-Distill-oQ4e-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "variants": {
+        "high": {
+          "reasoningEffort": "xhigh"
+        },
+        "medium": {
+          "reasoningEffort": "medium"
+        },
+        "low": {
+          "reasoningEffort": "low"
+        }
+      }
     },
     "Qwen3.8-27B-oQ3.5e-mtp": {
       "name": "Qwen3.8-27B-oQ3.5e-mtp",
@@ -142,7 +157,17 @@ jq --argjson omlx '{
         },
         "medium": {
           "reasoningEffort": "medium"
+        },
+        "low": {
+          "reasoningEffort": "low"
         }
+      }
+    },
+    "Qwen3.6-35B-A3B-oQ4e-mtp": {
+      "name": "Qwen3.6-35B-A3B-oQ4e-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
       }
     }
   }

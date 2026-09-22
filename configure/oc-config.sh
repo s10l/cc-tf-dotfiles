@@ -27,6 +27,8 @@ cat > "${AGENTS_FILE}" << 'EOF'
   - `.ssh`
   - `.config/gitlab`
   - `.config/infisical`
+  - `.config/gh`
+  - `.config/glab-cli`
   - `.pfx`, `*.pfx`
   - `opencode.json`, `opencode.jsonc` (may contain provider API keys)
   - any other config or credential files
@@ -197,6 +199,10 @@ else
           "~/.config/gitlab/*": "deny",
           "~/.config/infisical": "deny",
           "~/.config/infisical/*": "deny",
+          "~/.config/gh": "deny",
+          "~/.config/gh/*": "deny",
+          "~/.config/glab-cli": "deny",
+          "~/.config/glab-cli/*": "deny",
           "~/*.pfx": "deny"
         }
         end)
@@ -208,6 +214,8 @@ else
           "~/.ssh/**": "deny",
           "~/.config/gitlab/**": "deny",
           "~/.config/infisical/**": "deny",
+          "~/.config/gh/**": "deny",
+          "~/.config/glab-cli/**": "deny",
           "~/*.pfx": "deny"
         }
         end)
@@ -218,16 +226,28 @@ else
           "cat ~/.git-credentials": "deny",
           "cat ~/.config/gitlab*": "deny",
           "cat ~/.config/infisical*": "deny",
+          "cat ~/.config/gh*": "deny",
+          "cat ~/.config/glab-cli*": "deny",
           "cat ~/.pfx": "deny",
           "less ~/.ssh*": "deny",
           "less ~/.git-credentials": "deny",
           "less ~/.config/gitlab*": "deny",
           "less ~/.config/infisical*": "deny",
+          "less ~/.config/gh*": "deny",
+          "less ~/.config/glab-cli*": "deny",
           "less ~/.pfx": "deny",
           "head ~/.ssh*": "deny",
           "head ~/.git-credentials": "deny",
+          "head ~/.config/gitlab*": "deny",
+          "head ~/.config/infisical*": "deny",
+          "head ~/.config/gh*": "deny",
+          "head ~/.config/glab-cli*": "deny",
           "tail ~/.ssh*": "deny",
-          "tail ~/.git-credentials": "deny"
+          "tail ~/.git-credentials": "deny",
+          "tail ~/.config/gitlab*": "deny",
+          "tail ~/.config/infisical*": "deny",
+          "tail ~/.config/gh*": "deny",
+          "tail ~/.config/glab-cli*": "deny"
         }
         end)
     ' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"

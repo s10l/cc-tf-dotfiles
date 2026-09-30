@@ -21,6 +21,12 @@ for skill_dir in "${SKILLS_SRC}"/*/; do
     continue
   fi
 
+  # Copy, never symlink. The installed tree under ~/.config/opencode/skills is
+  # what gets loaded as agent instructions, and it must not be able to change
+  # through edits to a working tree (branch switch, an agent writing files, a
+  # partial checkout). Symlinking is therefore a security regression, not an
+  # optimisation - do not "improve" this. It also makes the rm -rf below safe:
+  # it only ever deletes a copy this script is about to replace.
   rm -rf "${SKILLS_DST}/${skill_name}"
   cp -R "${skill_dir}" "${SKILLS_DST}/${skill_name}"
   echo "[skills] installed ${skill_name}"

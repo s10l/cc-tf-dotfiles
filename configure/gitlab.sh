@@ -2,6 +2,9 @@
 set -euo pipefail
 
 MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "${MAIN_DIR}/lib/common.sh"
+
 GITLAB_ENV="${HOME}/.config/gitlab/.env"
 
 if [ ! -f "${GITLAB_ENV}" ]; then
@@ -23,7 +26,7 @@ fi
 git config --global credential.helper store
 
 # --- PAT (idempotent) ---
-glpat=$("${MAIN_DIR}/bin/infisical/infisical.sh" secret get -s /git glpat)
+glpat="$(fetch_secret glpat /git gitlab)" || exit 1
 cred_line="https://oauth2:${glpat}@${GITLAB_HOST}"
 if grep -qF -- "${cred_line}" "${HOME}/.git-credentials" 2>/dev/null; then
   echo "[gitlab] PAT credential already present for ${GITLAB_HOST}"

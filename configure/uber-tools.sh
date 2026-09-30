@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# bootstrap-requires: gitlab.sh
+#
+# Clones from an authenticated GitLab host, so gitlab.sh has to have stored the
+# PAT credential first. bootstrap.sh validates that ordering before it runs
+# anything; the precondition check below covers a standalone run of this module.
+
+# Unattended by contract: a missing credential must fail, never prompt.
+export GIT_TERMINAL_PROMPT=0
+
 GITLAB_ENV="${HOME}/.config/gitlab/.env"
 
 if [ ! -f "${GITLAB_ENV}" ]; then
@@ -17,6 +26,17 @@ fi
 
 TARGET_DIR="${HOME}/.config/uber-tools"
 REMOTE_URL="https://${GITLAB_HOST}/uber/tools.git"
+
+# --- Precondition (see bootstrap-requires above) ---
+if [ "$(git config --get credential.helper 2>/dev/null || true)" != "store" ]; then
+  echo "[uber-tools] FAILED: git credential.helper is not 'store'; run 'bash configure/gitlab.sh' first"
+  exit 1
+fi
+if ! grep -qF -- "oauth2:" "${HOME}/.git-credentials" 2>/dev/null \
+   || ! grep -qF -- "@${GITLAB_HOST}" "${HOME}/.git-credentials" 2>/dev/null; then
+  echo "[uber-tools] FAILED: no stored credential for ${GITLAB_HOST}; run 'bash configure/gitlab.sh' first"
+  exit 1
+fi
 
 if [ -d "${TARGET_DIR}/.git" ]; then
   actual_remote="$(git -C "${TARGET_DIR}" config --get remote.origin.url 2>/dev/null || true)"

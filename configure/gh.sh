@@ -2,6 +2,13 @@
 set -euo pipefail
 
 MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "${MAIN_DIR}/lib/common.sh"
+
+if ! infisical_configured; then
+  echo "[gh] skipping: no Infisical config at ${INFISICAL_CONFIG_FILE:-${HOME}/.config/infisical/.env}"
+  exit 0
+fi
 
 if ! command -v gh >/dev/null 2>&1; then
   echo "[gh] skipping: gh (GitHub CLI) not found on PATH"
@@ -13,7 +20,7 @@ if gh auth status --hostname github.com >/dev/null 2>&1; then
   exit 0
 fi
 
-ghpat=$("${MAIN_DIR}/bin/infisical/infisical.sh" secret get -s /git ghpat)
+ghpat="$(fetch_secret ghpat /git gh)" || exit 1
 if printf '%s\n' "${ghpat}" | gh auth login --hostname github.com --with-token --git-protocol https; then
   echo "[gh] authenticated for github.com"
 else

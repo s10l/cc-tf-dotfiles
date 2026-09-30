@@ -2,6 +2,8 @@
 set -euo pipefail
 
 MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "${MAIN_DIR}/lib/common.sh"
 
 SECRETS_PATH="/ssh"
 SSH_DIR="${HOME}/.ssh"
@@ -13,8 +15,12 @@ DEFAULT_NAME="${SECRETS[0]}"
 DEFAULT_INSTALLED=0
 
 for name in "${SECRETS[@]}"; do
-  value=$("${MAIN_DIR}/bin/infisical/infisical.sh" secret get -s "${SECRETS_PATH}" "${name}" 2>/dev/null) || {
-    echo "[ssh] skipping ${name}: secret not found"
+  # stderr is dropped on purpose: these keys are optional, so a missing secret
+  # is normal and gets the friendly message below instead of a stack of
+  # diagnostics. An empty value is rejected too - it would write a useless
+  # empty key file.
+  value="$(fetch_secret "${name}" "${SECRETS_PATH}" ssh 2>/dev/null)" || {
+    echo "[ssh] skipping ${name}: secret not found or empty in ${SECRETS_PATH}"
     continue
   }
 

@@ -31,7 +31,27 @@ cat > "${AGENTS_FILE}" << 'EOF'
   - `.config/glab-cli`
   - `.pfx`, `*.pfx`
   - `opencode.json`, `opencode.jsonc` (may contain provider API keys)
+  - `opencode.json.bak`, `opencode.jsonc.bak` (copies of the above)
   - any other config or credential files
+
+# Environment Notes
+
+- The skills under `~/.config/opencode/skills/` are generated output: a
+  dotfiles bootstrap copies them in. If a skill looks wrong, stale or missing,
+  say so and let the user re-run the bootstrap — do not edit the installed
+  copy, it is replaced on the next run.
+- This file, the `instructions` entry in `opencode.json(c)` and the
+  `permission` / `provider.omlx` entries are generated the same way. The
+  bootstrap script is the source of truth; these files are its output.
+- `opencode.json(c)` is rewritten on every bootstrap run: JSONC comments and
+  trailing commas are stripped. Keep notes in a separate file.
+- The uber-tools CLI lives at `${HOME}/.config/uber-tools/uber-tools.sh`.
+  Always call it by that full path — the `ut` alias does not exist in
+  non-interactive shells.
+- Commits use Conventional Commits without a scope: `feat: ...`, `fix: ...`,
+  never `feat(scope): ...`.
+- Bootstrap runs unattended: never prompt for input. A missing prerequisite is
+  an error to report, not a question to ask the terminal.
 EOF
 echo "[opencode] installed DOTFILES-AGENTS.md"
 
@@ -56,7 +76,8 @@ fi
 
 WORK_FILE=$(mktemp)
 SANITIZER=$(mktemp --suffix=.cjs)
-trap 'rm -f "${SANITIZER}" "${WORK_FILE}"' EXIT
+SNAP_FILE=$(mktemp)
+trap 'rm -f "${SANITIZER}" "${WORK_FILE}" "${SNAP_FILE}"' EXIT
 
 cat > "${SANITIZER}" << 'EOF'
 const fs = require("fs");
@@ -168,6 +189,13 @@ if ! jq -e . "${WORK_FILE}" >/dev/null 2>&1; then
   echo "[opencode] skipping: cannot parse ${CONFIG_FILE} (invalid JSON/JSONC)"
   exit 0
 fi
+
+# Snapshot of everything this script must not touch. provider.omlx, permission
+# and instructions are the only keys it is allowed to change; anything else
+# that moves between here and the final write is a bug, and the write is
+# refused. Taken after sanitising, so stripped JSONC comments do not count as a
+# change.
+jq -S 'del(.provider.omlx, .permission, .instructions)' "${WORK_FILE}" > "${SNAP_FILE}"
 
 if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
   if ! jq -e ".instructions | index(\"${AGENTS_MARKER}\")" "${WORK_FILE}" >/dev/null 2>&1; then
@@ -308,6 +336,26 @@ jq --argjson omlx '{
   }
 }' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = (($t.models // {}) * $s.models))' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
 echo "[opencode] configured omlx provider"
+
+# --- Never destroy the user's config ---
+# Everything above is additive (jq +, *, +=), so a well-behaved merge leaves
+# every other key byte-identical. Prove it before overwriting; if it does not
+# hold, leave the original in place instead of writing a broken config.
+TMPFILE=$(mktemp)
+jq -S 'del(.provider.omlx, .permission, .instructions)' "${WORK_FILE}" > "${TMPFILE}"
+if ! diff -u "${SNAP_FILE}" "${TMPFILE}" >/dev/null 2>&1; then
+  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions" >&2
+  diff -u "${SNAP_FILE}" "${TMPFILE}" >&2 || true
+  echo "[opencode]   ${CONFIG_FILE} was left untouched; please report this" >&2
+  rm -f "${TMPFILE}"
+  exit 1
+fi
+rm -f "${TMPFILE}"
+
+# The config can contain provider API keys, so the backup is exactly as
+# sensitive as the original and stays off-limits to agents.
+cp -p "${CONFIG_FILE}" "${CONFIG_FILE}.bak"
+echo "[opencode] backed up ${CONFIG_FILE} to ${CONFIG_FILE}.bak (may hold provider keys: off-limits)"
 
 mv "${WORK_FILE}" "${CONFIG_FILE}"
 echo "[opencode] wrote ${CONFIG_FILE}"

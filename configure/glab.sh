@@ -2,6 +2,9 @@
 set -euo pipefail
 
 MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "${MAIN_DIR}/lib/common.sh"
+
 GITLAB_ENV="${HOME}/.config/gitlab/.env"
 
 if [ ! -f "${GITLAB_ENV}" ]; then
@@ -61,7 +64,7 @@ if glab auth status --hostname "${GITLAB_HOST}" >/dev/null 2>&1; then
   exit 0
 fi
 
-glpat=$("${MAIN_DIR}/bin/infisical/infisical.sh" secret get -s /git glpat-admin)
+glpat="$(fetch_secret glpat-admin /git glab)" || exit 1
 if printf '%s\n' "${glpat}" | glab auth login --hostname "${GITLAB_HOST}" --api-host "${GITLAB_HOST}" --api-protocol https --git-protocol https --stdin; then
   echo "[glab] authenticated for ${GITLAB_HOST}"
 else

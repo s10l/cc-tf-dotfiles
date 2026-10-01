@@ -22,6 +22,10 @@ Running `bootstrap.sh` will:
 
 The modules are:
 
+- **Docker** (`docker.sh`): Creates one `docker context` per
+  `DOCKER_CONTEXT_<NAME>_HOST` entry in `~/.config/docker/.env`, updating
+  existing ones in place (`_CA`, `_CERT`, `_KEY`, `_DESCRIPTION` optional;
+  skips if the env file or `docker` is missing)
 - **GitHub** (`github.sh`): Stores a PAT credential via Infisical secret
   `/git/ghpat`
 - **GitHub CLI** (`gh.sh`): Authenticates `gh` for github.com with the same PAT

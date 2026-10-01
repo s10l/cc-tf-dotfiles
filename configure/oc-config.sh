@@ -195,7 +195,14 @@ fi
 # that moves between here and the final write is a bug, and the write is
 # refused. Taken after sanitising, so stripped JSONC comments do not count as a
 # change.
-jq -S 'del(.provider.omlx, .permission, .instructions)' "${WORK_FILE}" > "${SNAP_FILE}"
+#
+# .provider is created by the omlx merge when the config had none, so it is
+# dropped from the snapshot once omlx is stripped from it: a bare
+# "provider": {} left behind by the merge is the script's own doing, not a
+# hand-written key it lost. A provider object holding anything else is still
+# compared in full.
+SNAP_FILTER='del(.provider.omlx, .permission, .instructions) | if (.provider // {}) == {} then del(.provider) else . end'
+jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${SNAP_FILE}"
 
 if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
   if ! jq -e ".instructions | index(\"${AGENTS_MARKER}\")" "${WORK_FILE}" >/dev/null 2>&1; then
@@ -345,7 +352,7 @@ echo "[opencode] configured omlx provider"
 # every other key byte-identical. Prove it before overwriting; if it does not
 # hold, leave the original in place instead of writing a broken config.
 TMPFILE=$(mktemp)
-jq -S 'del(.provider.omlx, .permission, .instructions)' "${WORK_FILE}" > "${TMPFILE}"
+jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${TMPFILE}"
 if ! diff -u "${SNAP_FILE}" "${TMPFILE}" >/dev/null 2>&1; then
   echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions" >&2
   diff -u "${SNAP_FILE}" "${TMPFILE}" >&2 || true

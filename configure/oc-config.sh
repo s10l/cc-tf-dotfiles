@@ -244,7 +244,10 @@ else
           "~/.config/infisical/**": "deny",
           "~/.config/gh/**": "deny",
           "~/.config/glab-cli/**": "deny",
-          "~/*.pfx": "deny"
+          "~/*.pfx": "deny",
+          "/tmp": "allow",
+          "/tmp/*": "allow",
+          "/tmp/**": "allow"
         }
         end)
     | .permission.bash = (

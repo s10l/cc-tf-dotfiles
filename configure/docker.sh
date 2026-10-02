@@ -19,7 +19,9 @@ MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #
 # The context name is the lowercased <NAME> between the prefix and _HOST, so
 # PROD above becomes the context "prod". Only _HOST is required; _CA, _CERT,
-# _KEY and _DESCRIPTION are optional and left out of the endpoint when unset.
+# _KEY, _DESCRIPTION and _SSH_ID are optional and left out of the endpoint when
+# unset. _SSH_ID, if present, is added as a line to ~/.ssh/known_hosts
+# idempotently.
 #
 # Everything here is client-side: docker context needs no daemon, and nothing
 # outside ~/.docker is touched. An existing context is updated in place rather
@@ -52,7 +54,35 @@ value_of() {
   fi
 }
 
-ALL_KEYS="$(compgen -v | grep -E "^${ENV_PREFIX}[A-Za-z0-9_.+-]+_(HOST|CA|CERT|KEY|DESCRIPTION)$" || true)"
+# Add an SSH host key line to known_hosts idempotently
+add_known_hosts_line() {
+  local line="$1"
+  local kh_dir="${HOME}/.ssh"
+  local kh_file="${kh_dir}/known_hosts"
+
+  if [ -z "${line}" ]; then
+    return 0
+  fi
+
+  # Trim trailing newlines for exact matching
+  line="$(printf '%s' "${line}" | sed -e ':a' -e '/^\n*$/{$d;N;ba' -e '}' -e 's/\n*$//')"
+  if [ -z "${line}" ]; then
+    return 0
+  fi
+
+  mkdir -p "${kh_dir}"
+  chmod 700 "${kh_dir}"
+  touch "${kh_file}"
+  chmod 600 "${kh_file}" 2>/dev/null || true
+
+  if grep -qxF "${line}" "${kh_file}"; then
+    return 0
+  fi
+
+  printf '%s\n' "${line}" >> "${kh_file}"
+}
+
+ALL_KEYS="$(compgen -v | grep -E "^${ENV_PREFIX}[A-Za-z0-9_.+-]+_(HOST|CA|CERT|KEY|DESCRIPTION|SSH_ID)$" || true)"
 HOST_KEYS="$(printf '%s\n' ${ALL_KEYS} | grep -E "_HOST$" || true)"
 
 if [ -z "${HOST_KEYS}" ]; then
@@ -60,7 +90,7 @@ if [ -z "${HOST_KEYS}" ]; then
     # _HOST is the one required key: without it there is no endpoint, so the
     # context cannot be created and the other keys are unreachable.
     echo "[docker] FAILED: ${DOCKER_ENV} has ${ENV_PREFIX}<NAME>_* keys but no ${ENV_PREFIX}<NAME>_HOST"
-    echo "[docker]   _HOST is required; _CA, _CERT, _KEY and _DESCRIPTION are optional"
+    echo "[docker]   _HOST is required; _CA, _CERT, _KEY, _DESCRIPTION and _SSH_ID are optional"
     exit 1
   fi
   echo "[docker] skipping: no ${ENV_PREFIX}<NAME>_HOST entries in ${DOCKER_ENV}"
@@ -83,6 +113,7 @@ for host_key in ${HOST_KEYS}; do
   cert="$(value_of "${prefix}_CERT")"
   key="$(value_of "${prefix}_KEY")"
   description="$(value_of "${prefix}_DESCRIPTION")"
+  ssh_id="$(value_of "${prefix}_SSH_ID")"
 
   if printf '%s\n' ${RESERVED_CONTEXTS} | grep -qxF "${name}"; then
     echo "[docker] skipping: '${name}' is a reserved docker context; pick another <NAME> in ${DOCKER_ENV}"
@@ -144,6 +175,8 @@ for host_key in ${HOST_KEYS}; do
     echo "[docker] FAILED: 'docker context ${action} ${name} --docker ${endpoint}' failed"
     FAILED+=("${name}")
   fi
+
+  add_known_hosts_line "${ssh_id}"
 done
 
 # Optional keys for a context that has no _HOST would otherwise be silently
@@ -161,7 +194,7 @@ for key in ${ALL_KEYS}; do
   fi
   ORPHANED="${ORPHANED} ${orphan_prefix}"
   echo "[docker] FAILED: ${key} is set but ${orphan_prefix}_HOST is not"
-  echo "[docker]   _HOST is required per context; _CA, _CERT, _KEY and _DESCRIPTION are optional"
+  echo "[docker]   _HOST is required per context; _CA, _CERT, _KEY, _DESCRIPTION and _SSH_ID are optional"
   FAILED+=("${orphan_prefix#"${ENV_PREFIX}"}")
 done
 

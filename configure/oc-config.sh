@@ -292,6 +292,12 @@ else
   echo "[opencode] configured hard-deny permissions"
 fi
 
+# Fetch API key from Infisical
+OXMLX_API_KEY=""
+if command -v fetch_secret >/dev/null 2>&1; then
+  OXMLX_API_KEY=$(fetch_secret omlx "${HOME}/.config/opencode/.oc-omlx-key" 2>/dev/null) || true
+fi
+
 TMPFILE=$(mktemp)
 jq --argjson omlx '{
   "npm": "@ai-sdk/openai-compatible",
@@ -299,6 +305,7 @@ jq --argjson omlx '{
   "options": {
     "baseURL": "http://localhost:11433/v1"
   },
+  "apiKey": "${OXMLX_API_KEY}",
   "models": {
     "Qwen3.8-9B-Distill-oQ4e-mtp": {
       "name": "Qwen3.8-9B-Distill-oQ4e-mtp",

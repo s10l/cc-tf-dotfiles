@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MAIN_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=../lib/common.sh
+. "${MAIN_DIR}/lib/common.sh"
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "[opencode] skipping: jq not found"
   exit 0
@@ -292,20 +296,17 @@ else
   echo "[opencode] configured hard-deny permissions"
 fi
 
-# Fetch API key from Infisical
-OXMLX_API_KEY=""
-if command -v fetch_secret >/dev/null 2>&1; then
-  OXMLX_API_KEY=$(fetch_secret omlx "${HOME}/.config/opencode/.oc-omlx-key" 2>/dev/null) || true
-fi
+# Fetch API key from Infisical. The key is written into opencode.json, which
+# is sensitive; never print it.
+OXMLX_API_KEY="$(fetch_secret omlx /ai-api-keys opencode)" || true
 
 TMPFILE=$(mktemp)
-jq --argjson omlx '{
+jq --arg omlx_key "${OXMLX_API_KEY}" --argjson omlx '{
   "npm": "@ai-sdk/openai-compatible",
   "name": "oMLX",
   "options": {
     "baseURL": "http://localhost:11433/v1"
   },
-  "apiKey": "${OXMLX_API_KEY}",
   "models": {
     "Qwen3.8-9B-Distill-oQ4e-mtp": {
       "name": "Qwen3.8-9B-Distill-oQ4e-mtp",
@@ -351,7 +352,7 @@ jq --argjson omlx '{
       }
     }
   }
-}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = (($t.models // {}) * $s.models))' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
+}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = (($t.models // {}) * $s.models) | .apiKey = $omlx_key)' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
 echo "[opencode] configured omlx provider"
 
 # --- Never destroy the user's config ---

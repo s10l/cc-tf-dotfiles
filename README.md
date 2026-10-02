@@ -24,7 +24,7 @@ The modules are:
 
 - **Docker** (`docker.sh`): Creates one `docker context` per
   `DOCKER_CONTEXT_<NAME>_HOST` entry in `~/.config/docker/.env`, updating
-  existing ones in place (`_CA`, `_CERT`, `_KEY`, `_DESCRIPTION`, `_SSH_ID` optional;
+  existing ones in place (`_CA`, `_CERT`, `_KEY`, `_DESCRIPTION`, `_SSH_HOST_KEY` optional;
   skips if the env file or `docker` is missing)
 - **GitHub** (`github.sh`): Stores a PAT credential via Infisical secret
   `/git/ghpat`
@@ -34,6 +34,8 @@ The modules are:
   config from `~/.config/gitlab/.env`)
 - **GitLab CLI** (`glab.sh`): Converts the P12 bundle to PEM, points `glab` at
   it and authenticates with Infisical secret `/git/glpat-admin`
+- **SSH** (`ssh-id.sh`): Installs your `id_ed25519*` keys from Infisical path
+  `/ssh` and sets a default identity in `~/.ssh/config`
 - **OpenCode** (`oc-config.sh`): Installs the global agent instructions, merges
   the `omlx` provider/models and the hard-deny permissions into
   `opencode.json(c)`. The script is the source of truth; the deployed config is

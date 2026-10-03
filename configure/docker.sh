@@ -179,13 +179,31 @@ for host_key in ${HOST_KEYS}; do
   add_known_hosts_line "${ssh_host_key}"
 done
 
+# Longest suffix first: _SSH_HOST_KEY has to be tested before _KEY, otherwise
+# the key is read as belonging to a <NAME>_SSH_HOST context that never existed.
+readonly OPTIONAL_SUFFIXES=(SSH_HOST_KEY DESCRIPTION HOST CA CERT KEY)
+
+# Strip the optional key suffix from a variable name, leaving the prefix.
+strip_suffix() {
+  local key="$1" suffix
+  for suffix in "${OPTIONAL_SUFFIXES[@]}"; do
+    case "${key}" in
+      *_"${suffix}")
+        printf '%s' "${key%"_${suffix}"}"
+        return 0
+        ;;
+    esac
+  done
+  printf '%s' "${key}"
+}
+
 # Optional keys for a context that has no _HOST would otherwise be silently
 # dropped: catch them so a typo in the required key is not a no-op.
 for key in ${ALL_KEYS}; do
   case "${key}" in
     *_HOST) continue ;;
   esac
-  orphan_prefix="${key%_*}"
+  orphan_prefix="$(strip_suffix "${key}")"
   if printf '%s\n' ${HOST_KEYS} | grep -q "^${orphan_prefix}_HOST$"; then
     continue
   fi

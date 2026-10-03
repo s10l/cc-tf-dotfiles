@@ -200,12 +200,19 @@ fi
 # refused. Taken after sanitising, so stripped JSONC comments do not count as a
 # change.
 #
+# Root .apiKey is also excluded, and only ever deleted: earlier versions of
+# this script wrote the key there, which the config schema rejects (both the
+# root and ProviderConfig are additionalProperties: false). The key belongs in
+# provider.omlx.options next to baseURL, and the merge puts it there. Claiming
+# the stray key is how a config damaged by an earlier run heals itself; the
+# removal is logged.
+#
 # .provider is created by the omlx merge when the config had none, so it is
 # dropped from the snapshot once omlx is stripped from it: a bare
 # "provider": {} left behind by the merge is the script's own doing, not a
 # hand-written key it lost. A provider object holding anything else is still
 # compared in full.
-SNAP_FILTER='del(.provider.omlx, .permission, .instructions) | if (.provider // {}) == {} then del(.provider) else . end'
+SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey) | if (.provider // {}) == {} then del(.provider) else . end'
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${SNAP_FILE}"
 
 if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
@@ -299,6 +306,18 @@ fi
 # Fetch API key from Infisical. The key is written into opencode.json, which
 # is sensitive; never print it.
 OMLX_API_KEY="$(fetch_secret omlx /ai-api-keys opencode)" || true
+
+# An unreachable secret manager must not break a working provider: an empty key
+# leaves provider.omlx.options.apiKey exactly as the config already has it, and
+# fetch_secret has already said why on stderr.
+if [ -z "${OMLX_API_KEY}" ]; then
+  echo "[opencode] skipping: omlx API key unavailable; keeping the one already in ${CONFIG_FILE}" >&2
+fi
+
+# Say so before the merge removes it, so a stray key is never deleted quietly.
+if jq -e 'has("apiKey")' "${WORK_FILE}" >/dev/null 2>&1; then
+  echo "[opencode] removing stray root-level apiKey (the key belongs in provider.omlx.options)"
+fi
 
 # The omlx roster this run installs. Any other Qwen model currently under the
 # provider is dropped, so the picker only offers these.
@@ -431,7 +450,7 @@ jq --arg omlx_key "${OMLX_API_KEY}" --argjson omlx '{
       }
     }
   }
-}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = ((($t.models // {}) | to_entries | map(. as $e | select(($e.key | ascii_downcase | startswith("qwen") | not) or ($s.models | has($e.key)))) | from_entries) * $s.models) | .apiKey = $omlx_key)' "${WORK_FILE}" > "${TMPFILE}" || {
+}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | del(.apiKey) | .models = ((($t.models // {}) | to_entries | map(. as $e | select(($e.key | ascii_downcase | startswith("qwen") | not) or ($s.models | has($e.key)))) | from_entries) * $s.models) | .options = ((.options // {}) + (if $omlx_key == "" then {} else {apiKey: $omlx_key} end))) | del(.apiKey)' "${WORK_FILE}" > "${TMPFILE}" || {
   echo "[opencode] FAILED: merging omlx provider config into ${CONFIG_FILE}" >&2
   exit 1
 }
@@ -445,7 +464,7 @@ echo "[opencode] configured omlx provider"
 TMPFILE=$(mktemp)
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${TMPFILE}"
 if ! diff -u "${SNAP_FILE}" "${TMPFILE}" >/dev/null 2>&1; then
-  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions" >&2
+  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions / a removed root apiKey" >&2
   diff -u "${SNAP_FILE}" "${TMPFILE}" >&2 || true
   echo "[opencode]   ${CONFIG_FILE} was left untouched; please report this" >&2
   rm -f "${TMPFILE}"

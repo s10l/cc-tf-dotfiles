@@ -401,8 +401,8 @@ jq --arg omlx_key "${OMLX_API_KEY}" --argjson omlx '{
         }
       }
     },
-    "Qwen3.8-27B-oQ4-mtp": {
-      "name": "Qwen3.8-27B-oQ4-mtp",
+    "Qwen3.8-27B-oQ4e-mtp": {
+      "name": "Qwen3.8-27B-oQ4e-mtp",
       "limit": {
         "context": 262144,
         "output": 32768
@@ -425,8 +425,8 @@ jq --arg omlx_key "${OMLX_API_KEY}" --argjson omlx '{
         }
       }
     },
-    "Qwen3.8-27B-oQ8-mtp": {
-      "name": "Qwen3.8-27B-oQ8-mtp",
+    "Qwen3.8-27B-oQ8e-mtp": {
+      "name": "Qwen3.8-27B-oQ8e-mtp",
       "limit": {
         "context": 262144,
         "output": 32768

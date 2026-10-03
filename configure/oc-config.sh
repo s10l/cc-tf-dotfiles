@@ -298,49 +298,39 @@ fi
 
 # Fetch API key from Infisical. The key is written into opencode.json, which
 # is sensitive; never print it.
-OXMLX_API_KEY="$(fetch_secret omlx /ai-api-keys opencode)" || true
+OMLX_API_KEY="$(fetch_secret omlx /ai-api-keys opencode)" || true
 
+# The omlx roster this run installs. Any other Qwen model currently under the
+# provider is dropped, so the picker only offers these.
 TMPFILE=$(mktemp)
-jq --arg omlx_key "${OXMLX_API_KEY}" --argjson omlx '{
+jq --arg omlx_key "${OMLX_API_KEY}" --argjson omlx '{
   "npm": "@ai-sdk/openai-compatible",
   "name": "oMLX",
   "options": {
     "baseURL": "http://localhost:11433/v1"
   },
   "models": {
-    "Qwen3.8-9B-Distill-oQ4e-mtp": {
-      "name": "Qwen3.8-9B-Distill-oQ4e-mtp",
+    "Qwen3.8-9B-Distill-oQ8e-mtp": {
+      "name": "Qwen3.8-9B-Distill-oQ8e-mtp",
       "limit": {
         "context": 262144,
         "output": 32768
       },
       "variants": {
-        "high": {
-          "reasoningEffort": "xhigh"
+        "256k": {
+          "limit": {
+            "context": 262144
+          }
         },
-        "medium": {
-          "reasoningEffort": "medium"
+        "128k": {
+          "limit": {
+            "context": 131072
+          }
         },
-        "low": {
-          "reasoningEffort": "low"
-        }
-      }
-    },
-    "Qwen3.8-27B-oQ3.5e-mtp": {
-      "name": "Qwen3.8-27B-oQ3.5e-mtp",
-      "limit": {
-        "context": 262144,
-        "output": 32768
-      },
-      "variants": {
-        "high": {
-          "reasoningEffort": "xhigh"
-        },
-        "medium": {
-          "reasoningEffort": "medium"
-        },
-        "low": {
-          "reasoningEffort": "low"
+        "64k": {
+          "limit": {
+            "context": 65536
+          }
         }
       }
     },
@@ -349,10 +339,103 @@ jq --arg omlx_key "${OXMLX_API_KEY}" --argjson omlx '{
       "limit": {
         "context": 262144,
         "output": 32768
+      },
+      "variants": {
+        "256k": {
+          "limit": {
+            "context": 262144
+          }
+        },
+        "128k": {
+          "limit": {
+            "context": 131072
+          }
+        },
+        "64k": {
+          "limit": {
+            "context": 65536
+          }
+        }
+      }
+    },
+    "Qwen3.6-35B-A3B-oQ6e-mtp": {
+      "name": "Qwen3.6-35B-A3B-oQ6e-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "variants": {
+        "256k": {
+          "limit": {
+            "context": 262144
+          }
+        },
+        "128k": {
+          "limit": {
+            "context": 131072
+          }
+        },
+        "64k": {
+          "limit": {
+            "context": 65536
+          }
+        }
+      }
+    },
+    "Qwen3.8-27B-oQ4-mtp": {
+      "name": "Qwen3.8-27B-oQ4-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "variants": {
+        "256k": {
+          "limit": {
+            "context": 262144
+          }
+        },
+        "128k": {
+          "limit": {
+            "context": 131072
+          }
+        },
+        "64k": {
+          "limit": {
+            "context": 65536
+          }
+        }
+      }
+    },
+    "Qwen3.8-27B-oQ8-mtp": {
+      "name": "Qwen3.8-27B-oQ8-mtp",
+      "limit": {
+        "context": 262144,
+        "output": 32768
+      },
+      "variants": {
+        "256k": {
+          "limit": {
+            "context": 262144
+          }
+        },
+        "128k": {
+          "limit": {
+            "context": 131072
+          }
+        },
+        "64k": {
+          "limit": {
+            "context": 65536
+          }
+        }
       }
     }
   }
-}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = (($t.models // {}) * $s.models) | .apiKey = $omlx_key)' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
+}' '.provider.omlx = ((.provider.omlx // {}) as $t | $omlx as $s | $t * $s | .models = ((($t.models // {}) | to_entries | map(. as $e | select(($e.key | ascii_downcase | startswith("qwen") | not) or ($s.models | has($e.key)))) | from_entries) * $s.models) | .apiKey = $omlx_key)' "${WORK_FILE}" > "${TMPFILE}" || {
+  echo "[opencode] FAILED: merging omlx provider config into ${CONFIG_FILE}" >&2
+  exit 1
+}
+mv "${TMPFILE}" "${WORK_FILE}"
 echo "[opencode] configured omlx provider"
 
 # --- Never destroy the user's config ---

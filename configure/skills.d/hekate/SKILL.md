@@ -28,7 +28,8 @@ description: Reference for configuring Docker container labels so apps are disco
 3. If the container is behind Traefik (the normal path), explain how the URL is derived:
    - `hekate.url` label takes highest precedence — set it to skip Traefik parsing.
    - Otherwise hekate reads the Traefik router rule: `Host(\`example.com\`)` → `https://example.com`.
-   - Scheme comes from `traefik.http.routers.X.tls=true` → `https`, or from the `entrypoints` field matching `--https-entrypoints`.
+   - Router selection: an exact `Host(...)` beats a wildcard; among the same type, the lowest router name wins.
+   - The scheme is always `https` — hekate assumes TLS everywhere, whatever `tls`/`entrypoints` labels the router carries, and never generates a plain `http` link.
    - `PathPrefix(\`/auth\`)` is appended; bare `Path(\`/foo\`)` is ignored.
    - If no URL can be derived, the app appears with status `offline` (dimmed, non-clickable).
 
@@ -48,7 +49,7 @@ description: Reference for configuring Docker container labels so apps are disco
 
 5. Explain ACL behavior when `hekate.acl` is set:
    - No ACL → visible to every authenticated user.
-   - `hekate.acl=admin_group,sre` → only users in at least one of those groups see the app.
+   - `hekate.acl=ops,sre` → only users in at least one of those groups see the app.
    - `*` matches everyone (same as no ACL, but explicit).
    - The admin group (default `admins`) bypasses all ACL — they see everything.
 
@@ -58,8 +59,7 @@ description: Reference for configuring Docker container labels so apps are disco
    - `hide` → app is hidden from the UI (bypassed by admin group).
    - `hide_offline` / `offline` → forced into the offline status: dimmed and
      non-clickable when `state.show_status` is on, dropped from the grid when
-     `state.show_offline` is off. In the current code both values behave
-     identically.
+     `state.show_offline` is off.
    - Also mention the central `hekate.yaml` `state.show_offline` and `state.show_status` for global toggles.
 
 ## When to use me
@@ -160,6 +160,6 @@ labels:
 
 ### URL derivation examples
 
-- `Host(\`grafana.example.com\`)` → `https://grafana.example.com` (TLS on → https)
+- `Host(\`grafana.example.com\`)` → `https://grafana.example.com` (scheme always `https`)
 - `Host(\`*.example.com\`) && PathPrefix(\`/app\`)` → `https://<subdomain>.example.com/app`
 - `HostRegexp(\`{subdomain:[a-z]+}.example.com\`)` → **not derivable** (general regex, not literal or `*.suffix`) — app will be `offline` unless `hekate.url` is set.

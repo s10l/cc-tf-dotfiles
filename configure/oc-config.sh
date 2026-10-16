@@ -46,8 +46,8 @@ cat > "${AGENTS_FILE}" << 'EOF'
   copy, it is replaced on the next run.
 - This file, the `instructions` entry in `opencode.json(c)`, the
   `permission` / `provider.omlx` entries and the `mcp.home-assistant` /
-  `mcp.esphome` entries are generated the same way. The bootstrap script is the
-  source of truth; these files are its output.
+  `mcp.esphome` / `mcp.ha-mcp-admin` entries are generated the same way. The
+  bootstrap script is the source of truth; these files are its output.
 - `opencode.json(c)` is rewritten on every bootstrap run: JSONC comments and
   trailing commas are stripped. Keep notes in a separate file.
 - The uber-tools CLI lives at `${HOME}/.config/uber-tools/uber-tools.sh`.
@@ -196,7 +196,7 @@ if ! jq -e . "${WORK_FILE}" >/dev/null 2>&1; then
 fi
 
 # Snapshot of everything this script must not touch. provider.omlx, permission,
-# instructions and the two MCP entries below are the only keys it is allowed to
+# instructions and the MCP entries below are the only keys it is allowed to
 # change; anything else that moves between here and the final write is a bug,
 # and the write is refused. Taken after sanitising, so stripped JSONC comments
 # do not count as a change.
@@ -212,9 +212,10 @@ fi
 # dropped from the snapshot once omlx is stripped from it: a bare
 # "provider": {} left behind by the merge is the script's own doing, not a
 # hand-written key it lost. A provider object holding anything else is still
-# compared in full. .mcp gets the same treatment for the home-assistant and
-# esphome merges: a bare "mcp": {} is dropped, anything else is compared.
-SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey, .mcp["home-assistant"], .mcp["esphome"]) | if (.provider // {}) == {} then del(.provider) else . end | if (.mcp // {}) == {} then del(.mcp) else . end'
+# compared in full. .mcp gets the same treatment for the home-assistant,
+# esphome and ha-mcp-admin merges: a bare "mcp": {} is dropped, anything else is
+# compared.
+SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey, .mcp["home-assistant"], .mcp["esphome"], .mcp["ha-mcp-admin"]) | if (.provider // {}) == {} then del(.provider) else . end | if (.mcp // {}) == {} then del(.mcp) else . end'
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${SNAP_FILE}"
 
 if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
@@ -316,11 +317,13 @@ if [ -z "${OMLX_API_KEY}" ]; then
   echo "[opencode] skipping: omlx API key unavailable; keeping the one already in ${CONFIG_FILE}" >&2
 fi
 
-# home-assistant MCP: the host and the long-lived access token both come from
+# home-assistant MCPs: the host and the long-lived access token both come from
 # Infisical /home. The host is not really a secret, but fetch_secret gives it the
-# same non-empty guard and diagnostics. Never printed.
+# same non-empty guard and diagnostics. ha-workspace is the workspace directory
+# for the admin server. Never printed.
 HA_HOST="$(fetch_secret ha-host /home opencode)" || true
 HA_PAT="$(fetch_secret ha-pat /home opencode)" || true
+HA_WORKSPACE="$(fetch_secret ha-workspace /home opencode)" || true
 
 # esphome MCP: a single Infisical secret holding the full dashboard URL.
 ESPHOME_URL="$(fetch_secret esphome-url /home opencode)" || true
@@ -514,6 +517,34 @@ else
   echo "[opencode] skipping: esphome MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
 fi
 
+# ha-mcp-admin MCP. Same ownership rule, and it shares ha-host / ha-pat with the
+# remote home-assistant entry, plus ha-workspace for its working directory. Needs
+# all three: skip if any is missing, so a half-configured admin server is never
+# written.
+if [ -n "${HA_HOST}" ] && [ -n "${HA_PAT}" ] && [ -n "${HA_WORKSPACE}" ]; then
+  TMPFILE=$(mktemp)
+  jq --arg ha_host "${HA_HOST}" --arg ha_pat "${HA_PAT}" --arg ha_workspace "${HA_WORKSPACE}" '
+    .mcp = (.mcp // {})
+    | .mcp["ha-mcp-admin"] = {
+        "type": "local",
+        "command": ["npx", "-y", "@jasonsturges/homeassistant-mcp"],
+        "environment": {
+          "HASS_URL": ("http://" + $ha_host + ":8123"),
+          "HASS_TOKEN": $ha_pat,
+          "HASS_WORKSPACE": $ha_workspace
+        },
+        "enabled": true
+      }
+  ' "${WORK_FILE}" > "${TMPFILE}" || {
+    echo "[opencode] FAILED: merging ha-mcp-admin MCP config into ${CONFIG_FILE}" >&2
+    exit 1
+  }
+  mv "${TMPFILE}" "${WORK_FILE}"
+  echo "[opencode] configured ha-mcp-admin MCP"
+else
+  echo "[opencode] skipping: ha-mcp-admin MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
+fi
+
 # --- Never destroy the user's config ---
 # Everything above is additive (jq +, *, +=), so a well-behaved merge leaves
 # every other key byte-identical. Prove it before overwriting; if it does not
@@ -521,7 +552,7 @@ fi
 TMPFILE=$(mktemp)
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${TMPFILE}"
 if ! diff -u "${SNAP_FILE}" "${TMPFILE}" >/dev/null 2>&1; then
-  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions / the two MCP entries / a removed root apiKey" >&2
+  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions / the MCP entries / a removed root apiKey" >&2
   diff -u "${SNAP_FILE}" "${TMPFILE}" >&2 || true
   echo "[opencode]   ${CONFIG_FILE} was left untouched; please report this" >&2
   rm -f "${TMPFILE}"

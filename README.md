@@ -38,8 +38,8 @@ The modules are:
   `/ssh` and sets a default identity in `~/.ssh/config`
 - **OpenCode** (`oc-config.sh`): Installs the global agent instructions, merges
   the `omlx` provider/models, the hard-deny permissions and the `home-assistant`
-  / `esphome` MCP entries into `opencode.json(c)`. The script is the source of
-  truth; the deployed config is its output, and is backed up to
+  / `esphome` / `ha-mcp-admin` MCP entries into `opencode.json(c)`. The script is
+  the source of truth; the deployed config is its output, and is backed up to
   `opencode.json(c).bak` on every run
 - **Skills** (`skills.sh`): Copies skills from `configure/skills.d/` to
   `~/.config/opencode/skills/`

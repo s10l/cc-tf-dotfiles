@@ -44,9 +44,10 @@ cat > "${AGENTS_FILE}" << 'EOF'
   dotfiles bootstrap copies them in. If a skill looks wrong, stale or missing,
   say so and let the user re-run the bootstrap — do not edit the installed
   copy, it is replaced on the next run.
-- This file, the `instructions` entry in `opencode.json(c)` and the
-  `permission` / `provider.omlx` entries are generated the same way. The
-  bootstrap script is the source of truth; these files are its output.
+- This file, the `instructions` entry in `opencode.json(c)`, the
+  `permission` / `provider.omlx` entries and the `mcp.home-assistant` /
+  `mcp.esphome` entries are generated the same way. The bootstrap script is the
+  source of truth; these files are its output.
 - `opencode.json(c)` is rewritten on every bootstrap run: JSONC comments and
   trailing commas are stripped. Keep notes in a separate file.
 - The uber-tools CLI lives at `${HOME}/.config/uber-tools/uber-tools.sh`.
@@ -194,11 +195,11 @@ if ! jq -e . "${WORK_FILE}" >/dev/null 2>&1; then
   exit 0
 fi
 
-# Snapshot of everything this script must not touch. provider.omlx, permission
-# and instructions are the only keys it is allowed to change; anything else
-# that moves between here and the final write is a bug, and the write is
-# refused. Taken after sanitising, so stripped JSONC comments do not count as a
-# change.
+# Snapshot of everything this script must not touch. provider.omlx, permission,
+# instructions and the two MCP entries below are the only keys it is allowed to
+# change; anything else that moves between here and the final write is a bug,
+# and the write is refused. Taken after sanitising, so stripped JSONC comments
+# do not count as a change.
 #
 # Root .apiKey is also excluded, and only ever deleted: earlier versions of
 # this script wrote the key there, which the config schema rejects (both the
@@ -211,8 +212,9 @@ fi
 # dropped from the snapshot once omlx is stripped from it: a bare
 # "provider": {} left behind by the merge is the script's own doing, not a
 # hand-written key it lost. A provider object holding anything else is still
-# compared in full.
-SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey) | if (.provider // {}) == {} then del(.provider) else . end'
+# compared in full. .mcp gets the same treatment for the home-assistant and
+# esphome merges: a bare "mcp": {} is dropped, anything else is compared.
+SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey, .mcp["home-assistant"], .mcp["esphome"]) | if (.provider // {}) == {} then del(.provider) else . end | if (.mcp // {}) == {} then del(.mcp) else . end'
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${SNAP_FILE}"
 
 if jq -e ".instructions" "${WORK_FILE}" >/dev/null 2>&1; then
@@ -313,6 +315,15 @@ OMLX_API_KEY="$(fetch_secret omlx /ai-api-keys opencode)" || true
 if [ -z "${OMLX_API_KEY}" ]; then
   echo "[opencode] skipping: omlx API key unavailable; keeping the one already in ${CONFIG_FILE}" >&2
 fi
+
+# home-assistant MCP: the host and the long-lived access token both come from
+# Infisical /home. The host is not really a secret, but fetch_secret gives it the
+# same non-empty guard and diagnostics. Never printed.
+HA_HOST="$(fetch_secret ha-host /home opencode)" || true
+HA_PAT="$(fetch_secret ha-pat /home opencode)" || true
+
+# esphome MCP: a single Infisical secret holding the full dashboard URL.
+ESPHOME_URL="$(fetch_secret esphome-url /home opencode)" || true
 
 # Say so before the merge removes it, so a stray key is never deleted quietly.
 if jq -e 'has("apiKey")' "${WORK_FILE}" >/dev/null 2>&1; then
@@ -457,6 +468,52 @@ jq --arg omlx_key "${OMLX_API_KEY}" --argjson omlx '{
 mv "${TMPFILE}" "${WORK_FILE}"
 echo "[opencode] configured omlx provider"
 
+# home-assistant MCP. The script owns this one entry: it is replaced outright on
+# every run, so hand-edits to it do not survive. Other MCP entries are untouched.
+# Both values are passed in, so neither the host nor the token appears in the jq
+# program or in any output.
+if [ -n "${HA_HOST}" ] && [ -n "${HA_PAT}" ]; then
+  TMPFILE=$(mktemp)
+  jq --arg ha_host "${HA_HOST}" --arg ha_pat "${HA_PAT}" '
+    .mcp = (.mcp // {})
+    | .mcp["home-assistant"] = {
+        "type": "remote",
+        "url": ("http://" + $ha_host + ":8123/api/mcp"),
+        "headers": { "Authorization": ("Bearer " + $ha_pat) },
+        "enabled": true
+      }
+  ' "${WORK_FILE}" > "${TMPFILE}" || {
+    echo "[opencode] FAILED: merging home-assistant MCP config into ${CONFIG_FILE}" >&2
+    exit 1
+  }
+  mv "${TMPFILE}" "${WORK_FILE}"
+  echo "[opencode] configured home-assistant MCP"
+else
+  echo "[opencode] skipping: home-assistant MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
+fi
+
+# esphome MCP. Same ownership rule. The Infisical secret is the full dashboard
+# URL, used verbatim as ESPHOME_DASHBOARD_URL.
+if [ -n "${ESPHOME_URL}" ]; then
+  TMPFILE=$(mktemp)
+  jq --arg esphome_url "${ESPHOME_URL}" '
+    .mcp = (.mcp // {})
+    | .mcp["esphome"] = {
+        "type": "local",
+        "command": ["npx", "-y", "@esphome/mcp-server"],
+        "environment": { "ESPHOME_DASHBOARD_URL": $esphome_url },
+        "enabled": true
+      }
+  ' "${WORK_FILE}" > "${TMPFILE}" || {
+    echo "[opencode] FAILED: merging esphome MCP config into ${CONFIG_FILE}" >&2
+    exit 1
+  }
+  mv "${TMPFILE}" "${WORK_FILE}"
+  echo "[opencode] configured esphome MCP"
+else
+  echo "[opencode] skipping: esphome MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
+fi
+
 # --- Never destroy the user's config ---
 # Everything above is additive (jq +, *, +=), so a well-behaved merge leaves
 # every other key byte-identical. Prove it before overwriting; if it does not
@@ -464,7 +521,7 @@ echo "[opencode] configured omlx provider"
 TMPFILE=$(mktemp)
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${TMPFILE}"
 if ! diff -u "${SNAP_FILE}" "${TMPFILE}" >/dev/null 2>&1; then
-  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions / a removed root apiKey" >&2
+  echo "[opencode] ABORT: the merge would change ${CONFIG_FILE} outside provider.omlx / permission / instructions / the two MCP entries / a removed root apiKey" >&2
   diff -u "${SNAP_FILE}" "${TMPFILE}" >&2 || true
   echo "[opencode]   ${CONFIG_FILE} was left untouched; please report this" >&2
   rm -f "${TMPFILE}"

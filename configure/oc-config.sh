@@ -46,8 +46,8 @@ cat > "${AGENTS_FILE}" << 'EOF'
   copy, it is replaced on the next run.
 - This file, the `instructions` entry in `opencode.json(c)`, the
   `permission` / `provider.omlx` entries and the `mcp.home-assistant` /
-  `mcp.esphome` / `mcp.ha-mcp-admin` entries are generated the same way. The
-  bootstrap script is the source of truth; these files are its output.
+  `mcp.ha-mcp-admin` entries are generated the same way. The bootstrap script is
+  the source of truth; these files are its output.
 - `opencode.json(c)` is rewritten on every bootstrap run: JSONC comments and
   trailing commas are stripped. Keep notes in a separate file.
 - The uber-tools CLI lives at `${HOME}/.config/uber-tools/uber-tools.sh`.
@@ -212,9 +212,10 @@ fi
 # dropped from the snapshot once omlx is stripped from it: a bare
 # "provider": {} left behind by the merge is the script's own doing, not a
 # hand-written key it lost. A provider object holding anything else is still
-# compared in full. .mcp gets the same treatment for the home-assistant,
-# esphome and ha-mcp-admin merges: a bare "mcp": {} is dropped, anything else is
-# compared.
+# compared in full. .mcp gets the same treatment for the home-assistant and
+# ha-mcp-admin merges: a bare "mcp": {} is dropped, anything else is compared.
+# .mcp["esphome"] is excluded and only ever deleted: the entry was retired, and
+# configs from earlier script versions must lose it.
 SNAP_FILTER='del(.provider.omlx, .permission, .instructions, .apiKey, .mcp["home-assistant"], .mcp["esphome"], .mcp["ha-mcp-admin"]) | if (.provider // {}) == {} then del(.provider) else . end | if (.mcp // {}) == {} then del(.mcp) else . end'
 jq -S "${SNAP_FILTER}" "${WORK_FILE}" > "${SNAP_FILE}"
 
@@ -324,9 +325,6 @@ fi
 HA_HOST="$(fetch_secret ha-host /home opencode)" || true
 HA_PAT="$(fetch_secret ha-pat /home opencode)" || true
 HA_WORKSPACE="$(fetch_secret ha-workspace /home opencode)" || true
-
-# esphome MCP: a single Infisical secret holding the full dashboard URL.
-ESPHOME_URL="$(fetch_secret esphome-url /home opencode)" || true
 
 # Say so before the merge removes it, so a stray key is never deleted quietly.
 if jq -e 'has("apiKey")' "${WORK_FILE}" >/dev/null 2>&1; then
@@ -495,26 +493,13 @@ else
   echo "[opencode] skipping: home-assistant MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
 fi
 
-# esphome MCP. Same ownership rule. The Infisical secret is the full dashboard
-# URL, used verbatim as ESPHOME_DASHBOARD_URL.
-if [ -n "${ESPHOME_URL}" ]; then
+# esphome MCP was retired: configs written by earlier versions of this script
+# still carry the entry, so it is deleted on every run. Like the root apiKey
+# below, this key is only ever removed, and the removal is logged.
+if jq -e '(.mcp // {}) | has("esphome")' "${WORK_FILE}" >/dev/null 2>&1; then
   TMPFILE=$(mktemp)
-  jq --arg esphome_url "${ESPHOME_URL}" '
-    .mcp = (.mcp // {})
-    | .mcp["esphome"] = {
-        "type": "local",
-        "command": ["npx", "-y", "@esphome/mcp-server"],
-        "environment": { "ESPHOME_DASHBOARD_URL": $esphome_url },
-        "enabled": true
-      }
-  ' "${WORK_FILE}" > "${TMPFILE}" || {
-    echo "[opencode] FAILED: merging esphome MCP config into ${CONFIG_FILE}" >&2
-    exit 1
-  }
-  mv "${TMPFILE}" "${WORK_FILE}"
-  echo "[opencode] configured esphome MCP"
-else
-  echo "[opencode] skipping: esphome MCP unavailable; keeping the one already in ${CONFIG_FILE}" >&2
+  jq 'del(.mcp["esphome"]) | if (.mcp // {}) == {} then del(.mcp) else . end' "${WORK_FILE}" > "${TMPFILE}" && mv "${TMPFILE}" "${WORK_FILE}"
+  echo "[opencode] removed retired esphome MCP entry"
 fi
 
 # ha-mcp-admin MCP. Same ownership rule, and it shares ha-host / ha-pat with the

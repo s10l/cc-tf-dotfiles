@@ -38,9 +38,9 @@ The modules are:
   `/ssh` and sets a default identity in `~/.ssh/config`
 - **OpenCode** (`oc-config.sh`): Installs the global agent instructions, merges
   the `omlx` provider/models, the hard-deny permissions and the `home-assistant`
-  / `esphome` / `ha-mcp-admin` MCP entries into `opencode.json(c)`. The script is
-  the source of truth; the deployed config is its output, and is backed up to
-  `opencode.json(c).bak` on every run
+  / `ha-mcp-admin` MCP entries into `opencode.json(c)` (and removes the retired
+  `esphome` MCP entry). The script is the source of truth; the deployed config is
+  its output, and is backed up to `opencode.json(c).bak` on every run
 - **Skills** (`skills.sh`): Copies skills from `configure/skills.d/` to
   `~/.config/opencode/skills/`
 - **Uber Tools** (`uber-tools.sh`): Clones `https://${GITLAB_HOST}/uber/tools.git` to `~/.config/uber-tools` (or updates it), then adds its directory to PATH and an `ut` alias in both `~/.bashrc` and `~/.zshrc` (skips if `~/.config/gitlab/.env` is missing)

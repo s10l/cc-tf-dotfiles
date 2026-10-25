@@ -1,0 +1,36 @@
+---
+# Device entry point. The file name stem, `esphome: name:`, the bundle name
+# and the CI CFG must all be identical - that chain is what decides which
+# device a build is OTA-addressed to (see AGENTS.md).
+esphome:
+  name: "@@DEVICE@@"
+  friendly_name: "@@DEVICE@@"
+  comment: "@@BOARD@@"
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+# OTA lives in common/ota.yaml (pulled in by the package). Do not declare a
+# second `ota:` block here: two `platform: esphome` entries get merged by
+# ESPHome, which warns and becomes a hard error when version/id/key disagree.
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  domain: !secret domain
+  ap:
+    password: !secret wifi_ap_password
+
+captive_portal:
+
+logger:
+  level: DEBUG
+
+packages:
+  # Bundle mode: the package file travels inside <device>.esphomebundle.tar.gz.
+  host: !include @@DEVICE@@.package.yaml
+
+  # Without a bundle the source has to be fetched from the git remote instead.
+  # See reference/esphome-config.md ("Bundle mode vs remote_base") for the
+  # remote_base variant; it needs gluser/glpat secret refs.

@@ -1,0 +1,11 @@
+---
+# Package-owned helpers (input_number / input_select / timer). BARE list -
+# the domain key lives in the package root (../@@PKG@@.yaml).
+#
+# Every id and unique_id carries the @@PKG@@_ prefix.
+- id: @@PKG@@_example_number
+  name: "@@PKG@@ example number"
+  min: 0
+  max: 100
+  step: 1
+  initial: 0

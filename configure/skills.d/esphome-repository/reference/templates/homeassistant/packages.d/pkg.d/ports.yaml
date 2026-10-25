@@ -1,0 +1,13 @@
+---
+# PORTS - the only place where a foreign entity id may appear.
+#
+# A port is an input_text that holds the id of the external entity this
+# package reads from or writes to. Templates read
+# `states(states('input_text.@@PKG@@_src_<port>'))`; wiring.d binds the port
+# once. Renaming/replacing the external entity therefore needs no package edit.
+#
+# Port ids and names carry the package prefix: <pkg>_src_* / <pkg>_out_*.
+- id: @@PKG@@_src_example
+  name: "@@PKG@@ source example"
+  initial: ""
+  max: 255

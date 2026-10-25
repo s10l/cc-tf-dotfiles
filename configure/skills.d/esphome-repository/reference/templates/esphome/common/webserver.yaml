@@ -1,0 +1,6 @@
+---
+# Required by the `platform: web_server` OTA entry in common/ota.yaml and the
+# browser-based recovery path (http://<device>/update).
+web_server:
+  port: 80
+  version: 3

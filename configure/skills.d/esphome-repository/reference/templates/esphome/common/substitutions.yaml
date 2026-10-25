@@ -1,0 +1,15 @@
+---
+# Shared values used by `$name` substitution in the config tree. Keep
+# device-specific values in the device package, shared ones here.
+substitutions:
+  # Screen geometry (only meaningful with a display).
+  screen_width: "1024px"
+  screen_height: "600px"
+
+  # LVGL idle behaviour (only meaningful with LVGL).
+  touchscreen_idle_timeout: "60s"
+  touchscreen_idle_brightness: "20%"
+  touchscreen_on_brightness: "100%"
+
+  # Boot screen timing.
+  boot_screen_delay: "10s"

@@ -1,0 +1,20 @@
+---
+# Shared composition for one device. Keep board/hardware specifics in
+# common/hardware.yaml and feature blocks in their own files so two devices
+# can share everything except the entry point.
+packages:
+  substitutions: !include common/substitutions.yaml
+
+  # ESPHome plumbing
+  ota: !include common/ota.yaml
+  webserver: !include common/webserver.yaml
+
+  # Hardware (replace the generic board skeleton with the real one)
+  hardware: !include common/hardware.yaml
+
+  # Diagnostics
+  debug: !include common/debug.yaml
+
+  # OPTIONAL: LVGL/display includes. Remove when there is no display.
+  # screens: !include common/screens.yaml
+  # fonts: !include common/fonts.yaml

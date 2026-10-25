@@ -1,0 +1,13 @@
+# build artifacts: firmware, screenshots, bundles
+/build/
+
+# local ESPHome/PlatformIO state (never committed)
+.esphome/
+.pio/
+
+# secret-manager import file written by `make prepare-secrets` (HUMAN-ONLY);
+# holds REAL values until the human imports and deletes it
+/secrets.tmp.json
+
+# OS noise
+.DS_Store

@@ -1,0 +1,44 @@
+---
+# GENERIC BOARD SKELETON - replace with the real hardware configuration.
+# Keep one hardware file per board so devices can share it.
+#
+# Describe the target in the entry point's `comment:` and here:
+#   @@BOARD@@
+
+esphome:
+  min_version: 2026.7.0
+  project:
+    name: "@@PROJECT@@"
+    version: "1.0.0"
+
+esp32:
+  variant: esp32s3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+# Remove when the board has no PSRAM / uses a different mode.
+psram:
+  mode: octal
+  speed: 80MHz
+
+# Reduce flash wear for frequently written preferences.
+preferences:
+  flash_write_interval: 5min
+
+# Add the real buses and peripherals here, for example:
+# i2c:
+#   - id: bus_a
+#     sda: GPIO8
+#     scl: GPIO9
+#     scan: true
+#
+# output:
+#   - platform: ledc
+#     id: display_backlight_output
+#     pin: GPIO2
+#
+# light:
+#   - platform: monochromatic
+#     id: display_backlight
+#     output: display_backlight_output

@@ -1,0 +1,42 @@
+---
+# OPTIONAL UI preview config (screenshot only - never installed on a device).
+#
+# `make screenshot` renders this through the remote builder. The file name
+# stem must match `esphome: name:` because the builder resolves the config
+# from the bundle filename. It runs on the builder host, so hardware-specific
+# packages (ota, webserver, esp32) are intentionally not included.
+#
+# Replace the display/LVGL blocks with the real UI composition, and reuse the
+# same screen/font packages as the device so the render reflects the firmware.
+esphome:
+  name: "@@PROJECT@@-screenshot"
+  friendly_name: "@@PROJECT@@ screenshot"
+
+host:
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+logger:
+  level: DEBUG
+
+packages:
+  substitutions: !include common/substitutions.yaml
+  # screens: !include common/screens.yaml
+  # fonts: !include common/fonts.yaml
+
+display:
+  - platform: mipi_rgb
+    id: main_display
+    dimensions:
+      width: 1024
+      height: 600
+
+lvgl:
+  pages:
+    - id: main_page
+      widgets:
+        - label:
+            text: "@@PROJECT@@"
+            align: CENTER

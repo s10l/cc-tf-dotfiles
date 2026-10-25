@@ -1,0 +1,11 @@
+---
+# @@PKG@@ package root.
+#
+# A package ROOT must be a MAPPING of domain keys; every part file bound with
+# `domain: !include part.yaml` must be BARE content (a list, no domain key of
+# its own). Getting this wrong double-nests helpers and aborts HA setup with
+# "expected a mapping" - check-package-isolation.sh guards it.
+input_text: !include @@PKG@@.d/ports.yaml
+input_number: !include @@PKG@@.d/helpers.yaml
+template: !include @@PKG@@.d/template.yaml
+automation: !include @@PKG@@.d/automation.yaml

@@ -1,0 +1,17 @@
+---
+# BENCH wiring - offline stand-in for the live installation. Points the same
+# ports at local helpers so the package can be validated without touching the
+# real devices. Never enable live and bench at the same time.
+automation:
+  - alias: "@@PKG@@ wiring (bench)"
+    id: @@PKG@@_wiring_bench
+    mode: restart
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.@@PKG@@_src_example
+        data:
+          value: sensor.@@PKG@@_bench_example

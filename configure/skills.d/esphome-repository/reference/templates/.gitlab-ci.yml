@@ -1,0 +1,235 @@
+# ESPHome @@PROJECT@@ CI
+#
+# All firmware work runs remotely through ./esphome.sh (committed to this
+# repo), the CLI of the secure-esphome-builder service. No make, no python:
+# the runner image provides sh, curl, tar, gzip and awk.
+#
+# Trigger map:
+#   main (push)              -> validate endpoint, matrix over all devices
+#   MR into main             -> build endpoint, matrix over all devices
+#   MR into release-<device> -> build endpoint for THAT device only
+#   release-<device> (merge) -> install endpoint for THAT device
+#
+# release-* branches are merge-request-only (AGENTS.md): GitLab branch
+# protection forbids direct pushes, and the pipeline produced by a successful
+# merge performs the OTA install.
+#
+# The builder jobs only look at the firmware tree. They are skipped when the
+# pipeline changes none of the firmware inputs and when the commit (or MR head
+# commit) is a `chore` (AGENTS.md "Commit types and the compile bypass").
+# chore-guard fails the pipeline if a chore pipeline into main still changes
+# esphome/ instead of silently skipping a real firmware change. Release MRs
+# ignore the chore marker: their diff is everything since the last release,
+# and they only pre-compile their own device.
+
+stages:
+  - validate
+  - build
+  - install
+
+image: s10l/gl-gi-docker-deploy:2026.10.22
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release-/
+
+variables:
+  ESPHOME_DIR: esphome
+  BUILD_DIR: build
+  SECRET_REFS_FILE: secret_refs.yaml
+  ESPHOME_SH: ./esphome.sh
+  # Reuse an artifact for identical inputs (MR build -> release install).
+  # The cache key does NOT cover external_components / remote packages.
+  ESPHOME_ACCEPT_REMOTE_DRIFT: "1"
+
+# Everything the builder call depends on: the bundle contents (esphome/)
+# plus the committed CLI, the secret-reference list and its placeholder
+# guard. A pipeline that changes none of these has nothing to validate or
+# compile - docs, HA packages and CI-only edits stay off the builder.
+.firmware_paths: &firmware_paths
+  - "esphome/**/*"
+  - "esphome.sh"
+  - "secret_refs.yaml"
+  - "check-secrets.sh"
+
+# Shared base: secret-placeholder guard + secret refs + bundle packing for one
+# config (CFG).
+.builder:
+  # Serialize calls to the single shared builder: parallel matrix jobs race
+  # on the same cold ESP-IDF framework download and fail with partial-file
+  # size mismatches.
+  resource_group: esphome-builder
+  before_script:
+    # Prove esphome/secrets.yaml still holds dummy placeholders only, before
+    # anything is packed or sent (POSIX sh + grep/awk, no make/python).
+    - ./check-secrets.sh "$ESPHOME_DIR/secrets.yaml"
+    # --secret KEY=REF pairs from secret_refs.yaml, same contract as the
+    # Makefile: every non-empty "name: reference" line is passed, comments
+    # and quoted entries are stripped, empty values are skipped. References
+    # must not contain spaces.
+    - SECRET_ARGS=$(awk '/^[A-Za-z0-9_]+:/ { k=$0; sub(/:.*/, "", k); v=substr($0, index($0, ":")+1); sub(/^[ \t]+/, "", v); sub(/[ \t]+\043.*$/, "", v); sub(/[ \t]+$/, "", v); gsub(/^["\047]|["\047]$/, "", v); if (v != "") printf "--secret %s=%s ", k, v }' "$SECRET_REFS_FILE")
+    - '[ -x "$ESPHOME_SH" ] || chmod +x "$ESPHOME_SH"'
+    # Pack ONE device as $CFG.esphomebundle.tar.gz. The bundle filename is
+    # part of the builder contract and the only device discriminator: the
+    # archive must carry <CFG>.yaml at its root, and only that device's
+    # entry/package YAMLs - a bundle carrying a sibling device's YAML could
+    # silently resolve to the wrong firmware (AGENTS.md "Bundle filename
+    # contract"). esphome/secrets.yaml is always excluded, secrets travel as
+    # reference URIs only. Every step prints the bundle filename so install
+    # job logs record which device was flashed.
+    - mkdir -p "$BUILD_DIR"
+    - |
+      BUNDLE="$BUILD_DIR/$CFG.esphomebundle.tar.gz"
+      ENTRY="$ESPHOME_DIR/$CFG.yaml"
+      if [ ! -f "$ENTRY" ]; then
+        echo "FAIL: no entry YAML for $CFG: $ENTRY" >&2
+        exit 1
+      fi
+      # The compiled config's esphome name: is the OTA target. Assert the
+      # whole chain here: CFG -> bundle filename -> entry YAML -> name.
+      if ! grep -qE "^[[:space:]]*name:[[:space:]]*\"?$CFG\"?$" "$ENTRY"; then
+        echo "FAIL: $ENTRY does not declare esphome name '$CFG'" >&2
+        exit 1
+      fi
+      echo "creating $CFG.esphomebundle.tar.gz..."
+      FILES=$(cd "$ESPHOME_DIR" && ls -A | awk -v c="$CFG" '
+        /^[A-Za-z0-9_.-]+\.ya?ml$/ && $0 != c".yaml" && $0 != c".package.yaml" { next }
+        { print }')
+      tar -czf "$BUNDLE" --exclude='.esphome' --exclude='.pio*' --exclude='secrets.yaml' -C "$ESPHOME_DIR" $FILES
+      if ! tar -tzf "$BUNDLE" | grep -qxF "$CFG.yaml"; then
+        echo "FAIL: $CFG.esphomebundle.tar.gz lost its entry $CFG.yaml at the archive root" >&2
+        exit 1
+      fi
+      tar -tzf "$BUNDLE"
+      echo "$CFG.esphomebundle.tar.gz created"
+  artifacts:
+    when: always
+    expire_in: 1 week
+    paths:
+      - build/
+
+# Guard for the `chore` escape hatch: a `chore` subject declares "this cannot
+# affect firmware", so the builder jobs are skipped. If that same pipeline
+# still changes esphome/, fail fast in .pre - a firmware change must never
+# pass without a compile.
+chore-guard:
+  stage: .pre
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_TITLE =~ /^chore(\([^)]*\))?!?:/
+      changes:
+        paths:
+          - "esphome/**/*"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_COMMIT_TITLE =~ /^chore(\([^)]*\))?!?:/
+      changes:
+        paths:
+          - "esphome/**/*"
+    - when: never
+  script:
+    - echo "chore declares a firmware-neutral change, but this pipeline changes esphome/."
+    - echo "Record firmware changes as feat/fix/refactor so validate/build run."
+    - exit 1
+
+# Validate every device on a main push. The matrix is the reason a new device
+# only needs its name added here (and to DEVICES in the Makefile).
+validate:
+  extends: .builder
+  stage: validate
+  parallel:
+    matrix:
+      - CFG: [@@DEVICES_CSV@@]
+  rules:
+    # `chore` title: declared firmware-neutral, no builder call.
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_TITLE =~ /^chore(\([^)]*\))?!?:/
+      when: never
+    # firmware inputs changed by this push -> validate all configs.
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        paths: *firmware_paths
+    # docs/HA/CI-only push (e.g. a merge commit) -> skip.
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: never
+  script:
+    - echo "validating $CFG.esphomebundle.tar.gz..."
+    - $ESPHOME_SH validate --bundle "$BUNDLE" $SECRET_ARGS
+
+# Compile every device on an MR into main. Same matrix as validate.
+build:
+  extends: .builder
+  stage: build
+  parallel:
+    matrix:
+      - CFG: [@@DEVICES_CSV@@]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main" && $CI_COMMIT_TITLE =~ /^chore(\([^)]*\))?!?:/
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "main"
+      changes:
+        paths: *firmware_paths
+    - when: never
+  script:
+    - echo "compiling $CFG.esphomebundle.tar.gz..."
+    - $ESPHOME_SH compile --bundle "$BUNDLE" $SECRET_ARGS -o "$BUILD_DIR/firmware_$CFG.bin"
+
+# ---------------------------------------------------------------------------
+# Release pre-compile for ONE device.
+# Duplicate this block once per device and keep CFG and the branch in
+# release-<device> in sync. A release MR never waits for another device's
+# compile. (The rule cannot depend on a matrix variable, which is why this is
+# a per-device job instead of another matrix entry.)
+# ---------------------------------------------------------------------------
+build-@@DEVICE@@:
+  extends: .builder
+  stage: build
+  variables:
+    CFG: @@DEVICE@@
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "release-@@DEVICE@@"
+      changes:
+        paths: *firmware_paths
+    - when: never
+  script:
+    - echo "compiling $CFG.esphomebundle.tar.gz..."
+    - $ESPHOME_SH compile --bundle "$BUNDLE" $SECRET_ARGS -o "$BUILD_DIR/firmware_$CFG.bin"
+
+# ---------------------------------------------------------------------------
+# OTA install for ONE device, created only by a merge into its release
+# branch. Duplicate this block once per device as well; CFG and
+# EXPECTED_BRANCH must both name that device.
+# ---------------------------------------------------------------------------
+install-@@DEVICE@@:
+  extends: .builder
+  stage: install
+  variables:
+    CFG: @@DEVICE@@
+    EXPECTED_BRANCH: release-@@DEVICE@@
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release-@@DEVICE@@"
+  environment:
+    name: @@DEVICE@@
+  script:
+    # Belt and braces beyond the rules: this job flashes a live device and
+    # must only ever run on its own release branch.
+    - |
+      if [ "$CI_COMMIT_BRANCH" != "$EXPECTED_BRANCH" ]; then
+        echo "FAIL: install-@@DEVICE@@ may only run on $EXPECTED_BRANCH, not on ${CI_COMMIT_BRANCH:-<none>} - refusing to touch devices" >&2
+        exit 1
+      fi
+    - echo "installing $CFG.esphomebundle.tar.gz... (device $CFG, branch $CI_COMMIT_BRANCH)"
+    - $ESPHOME_SH install --bundle "$BUNDLE" $SECRET_ARGS
+
+# ---------------------------------------------------------------------------
+# OPTIONAL: Home Assistant package isolation lint. Remove this job if the repo
+# has no homeassistant/ directory. It is a plain shell step - no bundle, no
+# builder call - and it skips itself when the folder is absent.
+# ---------------------------------------------------------------------------
+ha-isolation:
+  stage: validate
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - if [ ! -d homeassistant/packages.d ]; then echo "no HA packages in this repo - nothing to lint"; exit 0; fi
+    - '[ -x ./check-package-isolation.sh ] || chmod +x ./check-package-isolation.sh'
+    - ./check-package-isolation.sh

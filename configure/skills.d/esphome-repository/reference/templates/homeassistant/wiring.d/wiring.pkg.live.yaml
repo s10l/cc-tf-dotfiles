@@ -1,0 +1,19 @@
+---
+# LIVE wiring - binds the @@PKG@@ ports to the real entities of this
+# installation. Never enable live and bench at the same time: the package
+# would read from two sources.
+#
+# This file is the ONLY place allowed to name foreign entity ids.
+automation:
+  - alias: "@@PKG@@ wiring (live)"
+    id: @@PKG@@_wiring_live
+    mode: restart
+    triggers:
+      - trigger: homeassistant
+        event: start
+    actions:
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.@@PKG@@_src_example
+        data:
+          value: sensor.example_source

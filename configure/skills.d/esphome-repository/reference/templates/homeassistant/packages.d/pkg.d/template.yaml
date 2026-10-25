@@ -1,0 +1,17 @@
+---
+# Template entities and mirrors. BARE list - the domain key lives in the
+# package root (../@@PKG@@.yaml).
+#
+# Rules:
+#  - every entity name/unique_id carries the @@PKG@@_ prefix;
+#  - external values arrive through a port (an input_text holding an entity
+#    id), never as a hard-coded foreign entity id;
+#  - a port that is empty/unbound resolves to `unknown`; dependants should
+#    degrade to `unknown` rather than guess.
+- sensor:
+    - name: "@@PKG@@ example mirror"
+      unique_id: @@PKG@@_example_mirror
+      state: >-
+        {{ states(states('input_text.@@PKG@@_src_example')) | default('unknown', true) }}
+      availability: >-
+        {{ states('input_text.@@PKG@@_src_example') not in ['', 'unknown', 'unavailable'] }}

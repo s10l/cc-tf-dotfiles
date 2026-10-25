@@ -1,0 +1,23 @@
+---
+# OTA is declared ONCE, here. Device entry points must not add their own
+# `ota:` block: two `platform: esphome` entries on the same port get merged by
+# ESPHome, which warns and turns into a hard error as soon as version/id/key
+# disagree.
+#
+# Authentication uses the api encryption key (`encryption:` without a key
+# inherits api.encryption.key - one key per device, nothing to keep in sync).
+ota:
+  - platform: esphome
+    encryption:
+
+  # DELIBERATE WARNING - DO NOT "FIX" IT:
+  #   WARNING OTA encryption does not cover the web_server OTA platform; its
+  #   plaintext /update endpoint accepts the same image
+  #
+  # This is the accepted price of keeping the web_server platform below. It is
+  # the rescue route when the encrypted path is unusable (bad wifi settings, a
+  # broken api/encryption config, or a firmware that no longer joins the
+  # network): http://<device>/update, no key and no tooling needed. Removing
+  # it would trade a working recovery path for a clean build log. Keep it and
+  # accept the warning; do not delete the platform to make CI quiet.
+  - platform: web_server

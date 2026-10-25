@@ -1,0 +1,6 @@
+---
+# Package automations. BARE list - the domain key lives in the package root
+# (../@@PKG@@.yaml). Alias and id carry the @@PKG@@_ prefix; a write into a
+# foreign entity is set-if-different unless there is a documented reason not
+# to be.
+[]

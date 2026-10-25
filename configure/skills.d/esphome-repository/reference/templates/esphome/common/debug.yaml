@@ -1,0 +1,7 @@
+---
+# Minimal diagnostics. Add feature-specific buttons/sensors here rather than
+# in the device entry point.
+button:
+  - platform: restart
+    name: "Restart"
+    id: restart_button

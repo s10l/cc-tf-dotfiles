@@ -13,7 +13,7 @@ stages:
 build:
   stage: build
   image:
-    name: s10l/gl-gi-docker-deploy:2026.09.07
+    name: s10l/gl-gi-docker-deploy:2026.11.05
   tags:
     - $BUILD_ARCH
   parallel:
@@ -37,7 +37,7 @@ build:
 manifest:
   stage: manifest
   image:
-    name: s10l/gl-gi-docker-deploy:2026.09.07
+    name: s10l/gl-gi-docker-deploy:2026.11.05
   before_script:
     # docker
     - docker login -u $DOCKER_REGISTRY_USER -p $DOCKER_REGISTRY_PASS $DOCKER_REGISTRY_HOST_LOCAL
@@ -55,7 +55,7 @@ manifest:
 build-renovate:
   stage: build
   image:
-    name: s10l/gl-gi-docker-deploy:2026.09.07
+    name: s10l/gl-gi-docker-deploy:2026.11.05
   tags:
     - $BUILD_ARCH
   parallel:

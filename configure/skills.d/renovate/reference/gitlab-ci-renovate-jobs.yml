@@ -1,0 +1,52 @@
+# Renovate CI integration for the house pipelines.
+#
+# Two jobs, plus the resource_group coupling on the live deploy job:
+#   renovate-config-check  - validates renovate.json on every pipeline
+#   docker-deploy-renovate - warms the host image cache on renovate/* branches
+#
+# The shared preamble is a hidden job (.ssh_and_docker) extended by every
+# host-touching job; host keys stay pinned via $HOSTKEY_LAB - never add a
+# StrictHostKeyChecking override, it would defeat the pinning.
+
+.ssh_and_docker:
+  before_script:
+    # ssh
+    - mkdir -p ~/.ssh
+    - touch ~/.ssh/known_hosts
+    - cat $HOSTKEY_LAB >> ~/.ssh/known_hosts
+    - cp $SSH_ID_ED25519_DOCKER ~/.ssh/id_ed25519
+    - chmod -R 600 ~/.ssh
+    - eval $(ssh-agent -s)
+    - ssh-add ~/.ssh/id_ed25519
+    # docker
+    - docker context create $CONTEXT --docker host=$DOCKER_HOST_URL
+    - docker context use $CONTEXT
+
+renovate-config-check:
+  stage: validate
+  image: renovate/renovate:44.227      # pinned; Renovate bumps the pin
+  script:
+    - renovate-config-validator
+
+deploy:
+  extends: .ssh_and_docker
+  stage: deploy
+  image: s10l/gl-gi-docker-deploy:2026.11.05
+  resource_group: <repo>-host          # serialize with the renovate pre-pull
+  script:
+    - docker compose pull
+    - docker compose up -d --force-recreate
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+## renovate ##
+
+docker-deploy-renovate:
+  extends: .ssh_and_docker
+  stage: deploy
+  image: s10l/gl-gi-docker-deploy:2026.11.05
+  resource_group: <repo>-host          # never fight the live deploy on the host
+  script:
+    - docker compose pull              # warm the cache; the merge deploy stays fast
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^renovate\//

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    {
+      "description": "<repo>: default no automerge",
+      "matchPackageNames": ["*"],
+      "automerge": false
+    },
+    {
+      "description": "<repo>: automerge all .gitlab-ci.yml image updates",
+      "matchManagers": ["gitlabci"],
+      "matchDatasources": ["docker"],
+      "automerge": true
+    },
+    {
+      "description": "<repo>: compose patch-only automerge",
+      "matchManagers": ["docker-compose"],
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "description": "<repo>: automerge date-tag (CalVer) compose images at every update type",
+      "matchManagers": ["docker-compose"],
+      "matchDatasources": ["docker"],
+      "matchCurrentValue": "/^\\d{4}\\.\\d{2}\\.\\d{2}(-[0-9a-z]+)?/",
+      "matchUpdateTypes": ["major", "minor", "patch", "replacement", "digest"],
+      "automerge": true
+    }
+  ]
+}

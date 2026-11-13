@@ -8,8 +8,9 @@ description: Inspect a .gitlab-ci pipeline and propose a plan to harmonize/align
 1. Load `.gitlab-ci.yml` (also check `.gitlab-ci.yaml` if the other form is absent). If a compose file exists, load it too.
 2. Audit the pipeline against the rules below.
 3. Produce a harmonization/refactor plan with concrete diffs. Show every proposed diff to the user before applying anything.
-4. Ask the user whether they want renovate job(s) in the pipeline.
-5. Inventory every image the repo references (compose files and CI jobs) and ask which of them should automerge at every update type — see the Renovate section.
+4. Audit concurrency: every non-matrix job carries a `resource_group`, matrix jobs carry none — see *Concurrency — resource groups*. Flag uncovered jobs, over-serialization, and same-artifact jobs in different groups.
+5. Ask the user whether they want renovate job(s) in the pipeline.
+6. Inventory every image the repo references (compose files and CI jobs) and ask which of them should automerge at every update type — see the Renovate section.
 
 ## Rules
 
@@ -56,7 +57,29 @@ Never rely on `$CI_PIPELINE_ID` (or similar pipeline-scoped values) for tags.
 - Show the user a potential diff of the matrix refactor.
 - For a worked matrix example, see `reference/gitlab-ci-matrix-example.yml` (global variables are illustrative and may change).
 - `parallel: matrix` only where every entry has the same target; if a job's `rules:` need to test a value that would be a matrix variable, it must be a separate per-target job — `rules:` cannot test matrix variables.
-- Jobs that touch the same shared resource (one remote host, one builder service) must carry a shared `resource_group` so they serialize instead of racing (e.g. the live deploy and the renovate pre-pull on the same host).
+- Jobs that touch the same shared resource (one remote host, one builder service) must carry a shared `resource_group` so they serialize instead of racing (e.g. the live deploy and the renovate pre-pull on the same host) — the full concurrency policy lives in *Concurrency — resource groups* below; apply it to every job you review.
+
+### Concurrency — resource groups
+
+Every non-matrix job carries a `resource_group`: duplicate work never races, and serialization is keyed by the job's **kind**, not its pipeline — steps of different pipeline IDs stay concurrent except where they would duplicate or race the same work.
+
+- **Build-type jobs** (`build`, `compile`, `docker-build`, …): one group per build kind — `resource_group: build-go` on the Go build, `resource_group: build-ts` on the TypeScript build. Consequences:
+  - same kind, same project (main pipeline vs MR pipeline vs retrigger): serialized — a build never runs concurrently with the same build of the same project;
+  - different kinds, same project (`build-go` + `build-ts`): concurrent — they share nothing;
+  - same kind, different projects: concurrent (groups are per project).
+- **Matrix exception**: a `parallel: matrix` job carries **no** `resource_group`. The matrix exists to run its legs concurrently — if matrix is used, concurrency is planned. The same-kind serialization rule above does not apply between a matrix's legs or between matrix builds of the same kind. When the legs must serialize anyway (they push shared tags, or the build is not safe to repeat), drop the matrix and use per-target jobs instead, each with a group keyed on the target artifact — distinct targets stay concurrent, same-target writes across pipelines serialize.
+- **Deploy pipelines**: ONE group for the whole pipeline. Every step that belongs to the deploy — provisioning, one-time backfills, `docker compose up`, smoke checks — carries the same `resource_group: deploy-<target>` (one group per host target when the repo deploys to several). No two deploy steps ever run concurrently with each other, and no other job touches that host while a deploy runs.
+- The renovate pre-pull job (`docker-deploy-renovate`) shares the deploy group — it reaches the host too.
+
+Audit checks:
+
+- every non-matrix job has a `resource_group` — flag any without one;
+- a matrix job carrying a `resource_group` → flag: it silently serializes its own legs against the matrix design; either drop the group or convert to per-target jobs;
+- two jobs sharing a group while producing *different* artifacts → over-serialization, propose separate groups;
+- two jobs producing the *same* artifact (same image tag, same manifest, same cache) in *different* groups → under-serialization, propose a shared group;
+- deploy steps split across several groups → collapse into the single `deploy-<target>` group.
+
+Group names should describe the shared thing (the artifact, tag, cache or host), never the pipeline — `build-go`, `deploy-lab`, not `$CI_PIPELINE_ID` (a per-pipeline group would serialize nothing).
 
 ### Rules (only/except)
 
@@ -73,7 +96,7 @@ Never rely on `$CI_PIPELINE_ID` (or similar pipeline-scoped values) for tags.
 
 ### Renovate: the per-image automerge question
 
-After inventorying the images (step 5), for each **compose file image** determine its tag style:
+After inventorying the images (step 6), for each **compose file image** determine its tag style:
 
 - **CalVer date-tag** (`2026.11.02`, optionally `-suffix`): the lab's own app images, built by their own pipelines. Candidates for automerge at *every* update type (`major`, `minor`, `patch`, `replacement`, `digest`).
 - **Semver / floating / third-party**: automerge stays `patch`-only at most; database images (`postgres`, `mysql`, `mariadb` and bitnami variants) never automerge.
